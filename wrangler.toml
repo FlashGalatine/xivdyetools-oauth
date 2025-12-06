@@ -1,0 +1,33 @@
+# XIV Dye Tools OAuth Worker
+# Handles Discord OAuth flow and JWT issuance
+
+name = "xivdyetools-oauth"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Development settings
+[dev]
+port = 8788
+local_protocol = "http"
+
+# Environment variables (non-secret)
+[vars]
+ENVIRONMENT = "development"
+DISCORD_CLIENT_ID = ""
+FRONTEND_URL = "http://localhost:5173"
+WORKER_URL = "http://localhost:8788"
+# JWT expiry in seconds (1 hour)
+JWT_EXPIRY = "3600"
+
+# Production environment
+[env.production]
+name = "xivdyetools-oauth"
+vars = { ENVIRONMENT = "production", DISCORD_CLIENT_ID = "", FRONTEND_URL = "https://xivdyetools.pages.dev", WORKER_URL = "https://xivdyetools-oauth.workers.dev", JWT_EXPIRY = "3600" }
+
+# Secrets (set via `wrangler secret put <NAME>`)
+# Required:
+#   DISCORD_CLIENT_SECRET - Discord OAuth client secret
+#   JWT_SECRET - Shared secret for signing JWTs (also configure in presets worker)
+#
+# Generate JWT_SECRET with: openssl rand -hex 32
