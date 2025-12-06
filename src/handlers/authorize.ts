@@ -45,9 +45,12 @@ authorizeRouter.get('/discord', (c) => {
   }
 
   // Validate redirect_uri if provided
+  // Support both the primary frontend URL and the custom domain
   const allowedRedirects = [
     c.env.FRONTEND_URL,
     `${c.env.FRONTEND_URL}/auth/callback`,
+    'https://xivdyetools.projectgalatine.com',
+    'https://xivdyetools.projectgalatine.com/auth/callback',
     'http://localhost:5173',
     'http://localhost:5173/auth/callback',
   ];
