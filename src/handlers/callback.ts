@@ -22,7 +22,7 @@ export const callbackRouter = new Hono<{ Bindings: Env }>();
  * - error: Error code
  * - error_description: Human-readable error
  */
-callbackRouter.get('/', async (c) => {
+callbackRouter.get('/callback', async (c) => {
   const { code, state, error, error_description } = c.req.query();
 
   // Handle Discord errors
@@ -132,7 +132,7 @@ callbackRouter.get('/', async (c) => {
  * - code_verifier: PKCE verifier to prove ownership
  * - redirect_uri: The redirect URI used in the initial request
  */
-callbackRouter.post('/', async (c) => {
+callbackRouter.post('/callback', async (c) => {
   let body: { code: string; code_verifier: string; redirect_uri?: string };
 
   try {
