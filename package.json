@@ -1,21 +1,29 @@
 {
   "name": "xivdyetools-oauth-worker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:production": "wrangler deploy --env production",
     "type-check": "tsc --noEmit",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "hono": "^4.6.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.10.14",
     "@cloudflare/workers-types": "^4.20241127.0",
     "@types/node": "^22.10.1",
+    "@vitest/coverage-v8": "^2.1.9",
+    "miniflare": "^4.20251202.1",
     "typescript": "^5.7.2",
+    "vitest": "^2.1.9",
+    "vitest-environment-miniflare": "^2.14.4",
     "wrangler": "^3.93.0"
   },
   "engines": {
