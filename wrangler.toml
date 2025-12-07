@@ -6,24 +6,25 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Development settings
+# Development settings (for wrangler dev)
 [dev]
 port = 8788
 local_protocol = "http"
 
-# Environment variables (non-secret)
+# Production environment variables (default for deployment)
+# This ensures `wrangler deploy` always deploys to production
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
 DISCORD_CLIENT_ID = "1447108133020369048"
-FRONTEND_URL = "http://localhost:5173"
-WORKER_URL = "http://localhost:8788"
+FRONTEND_URL = "https://xivdyetools.projectgalatine.com"
+WORKER_URL = "https://xivdyetools-oauth.ashejunius.workers.dev"
 # JWT expiry in seconds (1 hour)
 JWT_EXPIRY = "3600"
 
-# Production environment
-[env.production]
-name = "xivdyetools-oauth"
-vars = { ENVIRONMENT = "production", DISCORD_CLIENT_ID = "1447108133020369048", FRONTEND_URL = "https://xiv-colorexplorer.pages.dev", WORKER_URL = "https://xivdyetools-oauth.ashejunius.workers.dev", JWT_EXPIRY = "3600" }
+# Development environment (use: wrangler dev --env development)
+[env.development]
+name = "xivdyetools-oauth-dev"
+vars = { ENVIRONMENT = "development", DISCORD_CLIENT_ID = "1447108133020369048", FRONTEND_URL = "http://localhost:5173", WORKER_URL = "http://localhost:8788", JWT_EXPIRY = "3600" }
 
 # Secrets (set via `wrangler secret put <NAME>`)
 # Required:
