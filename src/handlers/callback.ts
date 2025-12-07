@@ -44,6 +44,7 @@ callbackRouter.get('/callback', async (c) => {
   let stateData: {
     csrf: string;
     code_challenge: string;
+    code_verifier: string;
     redirect_uri: string;
     return_path: string;
   };
@@ -57,7 +58,7 @@ callbackRouter.get('/callback', async (c) => {
   }
 
   try {
-    // Exchange code for tokens
+    // Exchange code for tokens (include code_verifier for PKCE)
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: {
@@ -69,6 +70,7 @@ callbackRouter.get('/callback', async (c) => {
         grant_type: 'authorization_code',
         code,
         redirect_uri: `${c.env.WORKER_URL}/auth/callback`,
+        code_verifier: stateData.code_verifier,
       }),
     });
 

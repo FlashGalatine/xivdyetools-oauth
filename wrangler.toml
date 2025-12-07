@@ -14,7 +14,7 @@ local_protocol = "http"
 # Environment variables (non-secret)
 [vars]
 ENVIRONMENT = "development"
-DISCORD_CLIENT_ID = "1433508594426445878"
+DISCORD_CLIENT_ID = "1447108133020369048"
 FRONTEND_URL = "http://localhost:5173"
 WORKER_URL = "http://localhost:8788"
 # JWT expiry in seconds (1 hour)
@@ -23,7 +23,7 @@ JWT_EXPIRY = "3600"
 # Production environment
 [env.production]
 name = "xivdyetools-oauth"
-vars = { ENVIRONMENT = "production", DISCORD_CLIENT_ID = "1433508594426445878", FRONTEND_URL = "https://xiv-colorexplorer.pages.dev", WORKER_URL = "https://xivdyetools-oauth.ashejunius.workers.dev", JWT_EXPIRY = "3600" }
+vars = { ENVIRONMENT = "production", DISCORD_CLIENT_ID = "1447108133020369048", FRONTEND_URL = "https://xiv-colorexplorer.pages.dev", WORKER_URL = "https://xivdyetools-oauth.ashejunius.workers.dev", JWT_EXPIRY = "3600" }
 
 # Secrets (set via `wrangler secret put <NAME>`)
 # Required:
