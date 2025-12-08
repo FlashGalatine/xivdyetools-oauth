@@ -15,13 +15,16 @@ export const authorizeRouter = new Hono<{ Bindings: Env }>();
  * Query parameters:
  * - code_challenge: PKCE code challenge (required for security)
  * - code_challenge_method: Must be 'S256' (SHA-256)
- * - code_verifier: PKCE code verifier (required for token exchange)
  * - state: Random state for CSRF protection (optional, generated if not provided)
  * - redirect_uri: Where to redirect after auth (must be whitelisted)
  * - return_path: Path in frontend to return to after auth (optional)
+ *
+ * SECURITY NOTE: The code_verifier should NEVER be sent to this endpoint.
+ * It must remain on the client and be sent directly to POST /auth/callback.
+ * This is the core security guarantee of PKCE - the verifier never travels through redirects.
  */
 authorizeRouter.get('/discord', (c) => {
-  const { code_challenge, code_challenge_method, code_verifier, state, redirect_uri, return_path } =
+  const { code_challenge, code_challenge_method, state, redirect_uri, return_path } =
     c.req.query();
 
   // Validate PKCE parameters
@@ -30,16 +33,6 @@ authorizeRouter.get('/discord', (c) => {
       {
         error: 'Missing code_challenge',
         message: 'PKCE code_challenge is required for security',
-      },
-      400
-    );
-  }
-
-  if (!code_verifier) {
-    return c.json(
-      {
-        error: 'Missing code_verifier',
-        message: 'PKCE code_verifier is required for token exchange',
       },
       400
     );
@@ -84,11 +77,11 @@ authorizeRouter.get('/discord', (c) => {
     );
   }
 
-  // Generate state if not provided (includes return info)
+  // Generate state with only safe data (NO code_verifier!)
+  // The code_verifier is kept on the client and sent via POST callback
   const stateData = {
     csrf: state || crypto.randomUUID(),
-    code_challenge, // Store for verification in callback
-    code_verifier, // Store for token exchange in callback
+    code_challenge, // Store for logging/debugging only
     redirect_uri: finalRedirectUri,
     return_path: return_path || '/',
   };

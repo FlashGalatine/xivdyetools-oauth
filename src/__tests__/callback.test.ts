@@ -21,6 +21,15 @@ describe('Callback Handler', () => {
         globalThis.fetch = originalFetch;
     });
 
+    /**
+     * GET /auth/callback tests
+     *
+     * SECURITY: The GET callback now returns the auth code to the frontend
+     * instead of exchanging it directly. The frontend then calls POST /auth/callback
+     * with the code + code_verifier from sessionStorage.
+     *
+     * This ensures the code_verifier NEVER travels through URL redirects.
+     */
     describe('GET /auth/callback', () => {
         it('should redirect with error when Discord returns error', async () => {
             const params = new URLSearchParams({
@@ -56,7 +65,7 @@ describe('Callback Handler', () => {
         it('should require code parameter', async () => {
             const state = btoa(JSON.stringify({
                 csrf: 'test',
-                code_verifier: 'verifier',
+                code_challenge: 'challenge',
                 redirect_uri: 'http://localhost:5173/auth/callback',
                 return_path: '/',
             }));
@@ -102,105 +111,13 @@ describe('Callback Handler', () => {
             expect(location.searchParams.get('error')).toContain('Invalid state');
         });
 
-        it('should handle Discord token exchange failure', async () => {
-            // Mock fetch to fail token exchange
-            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-                if (url.includes('discord.com/api/oauth2/token')) {
-                    return Promise.resolve(new Response('{"error": "invalid_grant"}', { status: 400 }));
-                }
-                return originalFetch(url);
-            });
+        it('should redirect with code (not token) for secure PKCE flow', async () => {
+            // GET callback now returns the code to frontend, not the token
+            // Frontend then exchanges code via POST /auth/callback with code_verifier
 
             const state = btoa(JSON.stringify({
-                csrf: 'test',
+                csrf: 'test-csrf-token',
                 code_challenge: 'challenge',
-                code_verifier: 'verifier',
-                redirect_uri: 'http://localhost:5173/auth/callback',
-                return_path: '/',
-            }));
-
-            const params = new URLSearchParams({
-                code: 'invalid_code',
-                state,
-            });
-
-            const response = await SELF.fetch(`http://localhost/auth/callback?${params}`, {
-                redirect: 'manual',
-            });
-
-            expect(response.status).toBe(302);
-
-            const location = new URL(response.headers.get('location')!);
-            expect(location.searchParams.get('error')).toBeTruthy();
-        });
-
-        it('should handle Discord user fetch failure', async () => {
-            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-                if (url.includes('oauth2/token')) {
-                    return Promise.resolve(new Response(JSON.stringify({
-                        access_token: 'valid_token',
-                        token_type: 'Bearer',
-                        expires_in: 604800,
-                        refresh_token: 'refresh',
-                        scope: 'identify',
-                    }), { status: 200 }));
-                }
-                if (url.includes('users/@me')) {
-                    return Promise.resolve(new Response('{"message": "401: Unauthorized"}', { status: 401 }));
-                }
-                return originalFetch(url);
-            });
-
-            const state = btoa(JSON.stringify({
-                csrf: 'test',
-                code_challenge: 'challenge',
-                code_verifier: 'verifier',
-                redirect_uri: 'http://localhost:5173/auth/callback',
-                return_path: '/',
-            }));
-
-            const params = new URLSearchParams({
-                code: 'valid_code',
-                state,
-            });
-
-            const response = await SELF.fetch(`http://localhost/auth/callback?${params}`, {
-                redirect: 'manual',
-            });
-
-            expect(response.status).toBe(302);
-
-            const location = new URL(response.headers.get('location')!);
-            expect(location.searchParams.get('error')).toContain('user information');
-        });
-
-        it('should redirect with token on successful auth', async () => {
-            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-                if (url.includes('oauth2/token')) {
-                    return Promise.resolve(new Response(JSON.stringify({
-                        access_token: 'discord_access_token',
-                        token_type: 'Bearer',
-                        expires_in: 604800,
-                        refresh_token: 'refresh',
-                        scope: 'identify',
-                    }), { status: 200 }));
-                }
-                if (url.includes('users/@me')) {
-                    return Promise.resolve(new Response(JSON.stringify({
-                        id: '123456789',
-                        username: 'testuser',
-                        discriminator: '0001',
-                        global_name: 'Test User',
-                        avatar: 'abc123',
-                    }), { status: 200 }));
-                }
-                return originalFetch(url);
-            });
-
-            const state = btoa(JSON.stringify({
-                csrf: 'test',
-                code_challenge: 'challenge',
-                code_verifier: 'verifier',
                 redirect_uri: 'http://localhost:5173/auth/callback',
                 return_path: '/',
             }));
@@ -217,37 +134,18 @@ describe('Callback Handler', () => {
             expect(response.status).toBe(302);
 
             const location = new URL(response.headers.get('location')!);
-            expect(location.searchParams.get('token')).toBeTruthy();
-            expect(location.searchParams.get('expires_at')).toBeTruthy();
+            // Should have code (for frontend to exchange via POST)
+            expect(location.searchParams.get('code')).toBe('valid_auth_code');
+            // Should have csrf token for validation
+            expect(location.searchParams.get('csrf')).toBe('test-csrf-token');
+            // Should NOT have token (that comes from POST exchange)
+            expect(location.searchParams.get('token')).toBeNull();
         });
 
         it('should include return_path in redirect when provided', async () => {
-            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-                if (url.includes('oauth2/token')) {
-                    return Promise.resolve(new Response(JSON.stringify({
-                        access_token: 'token',
-                        token_type: 'Bearer',
-                        expires_in: 604800,
-                        refresh_token: 'refresh',
-                        scope: 'identify',
-                    }), { status: 200 }));
-                }
-                if (url.includes('users/@me')) {
-                    return Promise.resolve(new Response(JSON.stringify({
-                        id: '123',
-                        username: 'test',
-                        discriminator: '0001',
-                        global_name: null,
-                        avatar: null,
-                    }), { status: 200 }));
-                }
-                return originalFetch(url);
-            });
-
             const state = btoa(JSON.stringify({
                 csrf: 'test',
                 code_challenge: 'challenge',
-                code_verifier: 'verifier',
                 redirect_uri: 'http://localhost:5173/auth/callback',
                 return_path: '/settings',
             }));
@@ -266,32 +164,9 @@ describe('Callback Handler', () => {
         });
 
         it('should not include return_path when it is root', async () => {
-            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-                if (url.includes('oauth2/token')) {
-                    return Promise.resolve(new Response(JSON.stringify({
-                        access_token: 'token',
-                        token_type: 'Bearer',
-                        expires_in: 604800,
-                        refresh_token: 'refresh',
-                        scope: 'identify',
-                    }), { status: 200 }));
-                }
-                if (url.includes('users/@me')) {
-                    return Promise.resolve(new Response(JSON.stringify({
-                        id: '123',
-                        username: 'test',
-                        discriminator: '0001',
-                        global_name: null,
-                        avatar: null,
-                    }), { status: 200 }));
-                }
-                return originalFetch(url);
-            });
-
             const state = btoa(JSON.stringify({
                 csrf: 'test',
                 code_challenge: 'challenge',
-                code_verifier: 'verifier',
                 redirect_uri: 'http://localhost:5173/auth/callback',
                 return_path: '/',
             }));
@@ -307,48 +182,6 @@ describe('Callback Handler', () => {
 
             const location = new URL(response.headers.get('location')!);
             expect(location.searchParams.has('return_path')).toBe(false);
-        });
-
-        it('should handle generic errors gracefully in GET callback', async () => {
-            // Mock fetch to throw an error after successful token exchange (during JWT creation)
-            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-                if (url.includes('oauth2/token')) {
-                    return Promise.resolve(new Response(JSON.stringify({
-                        access_token: 'token',
-                        token_type: 'Bearer',
-                        expires_in: 604800,
-                        refresh_token: 'refresh',
-                        scope: 'identify',
-                    }), { status: 200 }));
-                }
-                if (url.includes('users/@me')) {
-                    // Return a response that will throw when parsed as JSON (to trigger catch block)
-                    throw new Error('Network error');
-                }
-                return originalFetch(url);
-            });
-
-            const state = btoa(JSON.stringify({
-                csrf: 'test',
-                code_challenge: 'challenge',
-                code_verifier: 'verifier',
-                redirect_uri: 'http://localhost:5173/auth/callback',
-                return_path: '/',
-            }));
-
-            const params = new URLSearchParams({
-                code: 'code',
-                state,
-            });
-
-            const response = await SELF.fetch(`http://localhost/auth/callback?${params}`, {
-                redirect: 'manual',
-            });
-
-            expect(response.status).toBe(302);
-
-            const location = new URL(response.headers.get('location')!);
-            expect(location.searchParams.get('error')).toBe('Authentication failed');
         });
     });
 

@@ -12,11 +12,15 @@ export const callbackRouter = new Hono<{ Bindings: Env }>();
 /**
  * GET /auth/callback
  * Discord redirects here after user authorizes
- * Exchanges code for tokens, fetches user info, issues JWT
+ *
+ * SECURITY: This endpoint does NOT exchange the code directly.
+ * Instead, it redirects the auth code to the frontend, which then
+ * calls POST /auth/callback with the code + code_verifier from sessionStorage.
+ * This ensures the code_verifier never travels through URL redirects.
  *
  * Query parameters (from Discord):
  * - code: Authorization code
- * - state: State we sent (contains redirect info)
+ * - state: State we sent (contains redirect info, but NO code_verifier)
  *
  * Or for errors:
  * - error: Error code
@@ -40,11 +44,10 @@ callbackRouter.get('/callback', async (c) => {
     return c.redirect(redirectUrl.toString());
   }
 
-  // Decode state
+  // Decode state (no longer contains code_verifier for security)
   let stateData: {
     csrf: string;
     code_challenge: string;
-    code_verifier: string;
     redirect_uri: string;
     return_path: string;
   };
@@ -57,71 +60,16 @@ callbackRouter.get('/callback', async (c) => {
     return c.redirect(redirectUrl.toString());
   }
 
-  try {
-    // Exchange code for tokens (include code_verifier for PKCE)
-    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        client_id: c.env.DISCORD_CLIENT_ID,
-        client_secret: c.env.DISCORD_CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: `${c.env.WORKER_URL}/auth/callback`,
-        code_verifier: stateData.code_verifier,
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error('Token exchange failed:', errorText);
-
-      const redirectUrl = new URL(stateData.redirect_uri);
-      redirectUrl.searchParams.set('error', 'Failed to exchange authorization code');
-      return c.redirect(redirectUrl.toString());
-    }
-
-    const tokens: DiscordTokenResponse = await tokenResponse.json();
-
-    // Fetch user info
-    const userResponse = await fetch('https://discord.com/api/users/@me', {
-      headers: {
-        Authorization: `Bearer ${tokens.access_token}`,
-      },
-    });
-
-    if (!userResponse.ok) {
-      const errorText = await userResponse.text();
-      console.error('User fetch failed:', errorText);
-
-      const redirectUrl = new URL(stateData.redirect_uri);
-      redirectUrl.searchParams.set('error', 'Failed to fetch user information');
-      return c.redirect(redirectUrl.toString());
-    }
-
-    const discordUser: DiscordUser = await userResponse.json();
-
-    // Create our JWT
-    const { token, expires_at } = await createJWT(discordUser, c.env);
-
-    // Redirect back to frontend with token
-    const redirectUrl = new URL(stateData.redirect_uri);
-    redirectUrl.searchParams.set('token', token);
-    redirectUrl.searchParams.set('expires_at', expires_at.toString());
-    if (stateData.return_path && stateData.return_path !== '/') {
-      redirectUrl.searchParams.set('return_path', stateData.return_path);
-    }
-
-    return c.redirect(redirectUrl.toString());
-  } catch (err) {
-    console.error('OAuth callback error:', err);
-
-    const redirectUrl = new URL(stateData.redirect_uri);
-    redirectUrl.searchParams.set('error', 'Authentication failed');
-    return c.redirect(redirectUrl.toString());
+  // Redirect back to frontend with the auth code
+  // The frontend will then call POST /auth/callback with code + code_verifier
+  const redirectUrl = new URL(stateData.redirect_uri);
+  redirectUrl.searchParams.set('code', code);
+  redirectUrl.searchParams.set('csrf', stateData.csrf);
+  if (stateData.return_path && stateData.return_path !== '/') {
+    redirectUrl.searchParams.set('return_path', stateData.return_path);
   }
+
+  return c.redirect(redirectUrl.toString());
 });
 
 /**
