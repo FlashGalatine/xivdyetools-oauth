@@ -10,6 +10,7 @@ import type { Env } from './types.js';
 import { authorizeRouter } from './handlers/authorize.js';
 import { callbackRouter } from './handlers/callback.js';
 import { tokenRouter } from './handlers/refresh.js';
+import { checkRateLimit, getClientIp } from './services/rate-limit.js';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -45,11 +46,40 @@ app.use(
     },
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
-    exposeHeaders: [],
+    exposeHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'Retry-After'],
     maxAge: 86400, // 24 hours
     credentials: true,
   })
 );
+
+// Rate limiting middleware for auth endpoints
+// Protects against brute force and credential stuffing attacks
+app.use('/auth/*', async (c, next) => {
+  const clientIp = getClientIp(c.req.raw);
+  const path = new URL(c.req.url).pathname;
+  const result = checkRateLimit(clientIp, path);
+
+  // Set rate limit headers on all responses
+  c.header('X-RateLimit-Limit', result.limit.toString());
+  c.header('X-RateLimit-Remaining', result.remaining.toString());
+  c.header('X-RateLimit-Reset', Math.floor(result.resetAt.getTime() / 1000).toString());
+
+  if (!result.allowed) {
+    const retryAfter = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000);
+    c.header('Retry-After', retryAfter.toString());
+
+    return c.json(
+      {
+        error: 'Too Many Requests',
+        message: 'Rate limit exceeded. Please try again later.',
+        retryAfter,
+      },
+      429
+    );
+  }
+
+  await next();
+});
 
 // ============================================
 // ROUTES
