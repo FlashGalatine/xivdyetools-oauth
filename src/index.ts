@@ -94,7 +94,10 @@ app.notFound((c) => {
 
 // Global error handler
 app.onError((err, c) => {
-  console.error('Unhandled error:', err);
+  // Sanitize logs in production - only log error name and message, not full stack
+  const isDev = c.env.ENVIRONMENT === 'development';
+  const logMessage = isDev ? err : { name: err.name, message: err.message };
+  console.error('Unhandled error:', logMessage);
 
   return c.json(
     {

@@ -128,7 +128,12 @@ callbackRouter.post('/callback', async (c) => {
 
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.json().catch(() => ({}));
-      console.error('Token exchange failed:', errorData);
+      // Only log detailed error data in development to prevent info leakage
+      if (c.env.ENVIRONMENT === 'development') {
+        console.error('Token exchange failed:', errorData);
+      } else {
+        console.error('Token exchange failed');
+      }
 
       return c.json<AuthResponse>(
         {
@@ -176,7 +181,13 @@ callbackRouter.post('/callback', async (c) => {
       expires_at,
     });
   } catch (err) {
-    console.error('OAuth callback error:', err);
+    // Sanitize logs in production - only log error name and message
+    if (c.env.ENVIRONMENT === 'development') {
+      console.error('OAuth callback error:', err);
+    } else {
+      const error = err as Error;
+      console.error('OAuth callback error:', { name: error.name, message: error.message });
+    }
 
     return c.json<AuthResponse>(
       {
