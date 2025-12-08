@@ -22,26 +22,28 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', logger());
 
 // CORS configuration
-// SECURITY: Only allow specific origins - no wildcards for localhost
+// SECURITY: Allow specific origins plus any localhost port for development
 app.use(
   '*',
   cors({
     origin: (origin, c) => {
-      // Allow requests from frontend URLs
-      // Only specific development ports are allowed (no wildcards)
-      const allowedOrigins = [
-        c.env.FRONTEND_URL,
-        'http://localhost:5173', // Vite dev server
-        'http://localhost:4173', // Vite preview
-        'http://127.0.0.1:5173',
-        'http://127.0.0.1:4173',
-      ];
-
-      if (allowedOrigins.includes(origin || '')) {
-        return origin || '';
+      if (!origin) {
+        // No origin header (e.g., curl, Postman) - don't allow for security
+        return '';
       }
 
-      // No origin header (e.g., curl, Postman) - don't allow for security
+      // Allow the configured frontend URL
+      if (origin === c.env.FRONTEND_URL) {
+        return origin;
+      }
+
+      // Allow any localhost port for development flexibility
+      const localhostPattern = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+      if (localhostPattern.test(origin)) {
+        return origin;
+      }
+
+      // Not allowed
       return '';
     },
     allowMethods: ['GET', 'POST', 'OPTIONS'],

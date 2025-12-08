@@ -4,7 +4,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SELF } from './mocks/cloudflare-test.js';
+import { SELF, fetchWithEnv, createProductionEnv } from './mocks/cloudflare-test.js';
+import { resetRateLimiter } from '../services/rate-limit.js';
 
 // Store original fetch
 const originalFetch = globalThis.fetch;
@@ -13,6 +14,7 @@ describe('Callback Handler', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
+        resetRateLimiter();
     });
 
     afterEach(() => {
@@ -430,6 +432,97 @@ describe('Callback Handler', () => {
             expect(response.status).toBe(500);
             expect(json.success).toBe(false);
             expect(json.error).toBe('Authentication failed');
+        });
+    });
+
+    describe('POST /auth/callback (Production Environment)', () => {
+        it('should sanitize error logging for token exchange failure in production', async () => {
+            const prodEnv = createProductionEnv();
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('oauth2/token')) {
+                    return Promise.resolve(
+                        new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })
+                    );
+                }
+                return originalFetch(url);
+            });
+
+            const response = await fetchWithEnv(prodEnv, 'http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'invalid_code',
+                    code_verifier: 'verifier123',
+                }),
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            // In production, console.error should only log 'Token exchange failed' without detailed error data
+            expect(consoleSpy).toHaveBeenCalledWith('Token exchange failed');
+
+            consoleSpy.mockRestore();
+        });
+
+        it('should sanitize error logging for generic errors in production', async () => {
+            const prodEnv = createProductionEnv();
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            globalThis.fetch = vi.fn().mockImplementation(() => {
+                throw new Error('Production network error');
+            });
+
+            const response = await fetchWithEnv(prodEnv, 'http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'code',
+                    code_verifier: 'verifier',
+                }),
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(500);
+            expect(json.success).toBe(false);
+            // In production, should log sanitized error (name and message only)
+            expect(consoleSpy).toHaveBeenCalledWith('OAuth callback error:', {
+                name: 'Error',
+                message: 'Production network error',
+            });
+
+            consoleSpy.mockRestore();
+        });
+
+        it('should log full error details in development environment', async () => {
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('oauth2/token')) {
+                    return Promise.resolve(
+                        new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })
+                    );
+                }
+                return originalFetch(url);
+            });
+
+            await SELF.fetch('http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'invalid_code',
+                    code_verifier: 'verifier123',
+                }),
+            });
+
+            // In development, should log full error details
+            expect(consoleSpy).toHaveBeenCalledWith('Token exchange failed:', { error: 'invalid_grant' });
+
+            consoleSpy.mockRestore();
         });
     });
 });

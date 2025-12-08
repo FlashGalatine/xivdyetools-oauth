@@ -10,7 +10,12 @@ import {
     decodeJWT,
     isJWTExpired,
     getAvatarUrl,
+    isTokenRevoked,
+    revokeToken,
+    verifyJWTWithRevocationCheck,
+    verifyJWTSignatureOnly,
 } from '../services/jwt-service.js';
+import { createMockKV } from './mocks/cloudflare-test.js';
 import type { DiscordUser, Env } from '../types.js';
 
 // Mock environment
@@ -226,6 +231,244 @@ describe('JWT Service', () => {
 
             // Animated hash
             expect(getAvatarUrl('user123', 'a_hash456')).toContain('.gif');
+        });
+    });
+
+    describe('verifyJWTSignatureOnly', () => {
+        it('should return payload for valid signature (even if expired)', async () => {
+            const { token } = await createJWT(mockUser, mockEnv);
+
+            // Advance time past expiry
+            vi.advanceTimersByTime(3601 * 1000);
+
+            // Should still return payload since we only check signature
+            const payload = await verifyJWTSignatureOnly(token, mockEnv.JWT_SECRET);
+
+            expect(payload).not.toBeNull();
+            expect(payload!.sub).toBe(mockUser.id);
+        });
+
+        it('should return null for invalid signature', async () => {
+            const { token } = await createJWT(mockUser, mockEnv);
+            const wrongSecret = 'wrong-secret-key-for-testing-32chars';
+
+            const payload = await verifyJWTSignatureOnly(token, wrongSecret);
+
+            expect(payload).toBeNull();
+        });
+
+        it('should return null for malformed token', async () => {
+            expect(await verifyJWTSignatureOnly('invalid', mockEnv.JWT_SECRET)).toBeNull();
+            expect(await verifyJWTSignatureOnly('only.two', mockEnv.JWT_SECRET)).toBeNull();
+            expect(await verifyJWTSignatureOnly('a.b.c.d', mockEnv.JWT_SECRET)).toBeNull();
+        });
+
+        it('should return null for token with invalid base64', async () => {
+            const result = await verifyJWTSignatureOnly(
+                'eyJhbGciOiJIUzI1NiJ9.!!!invalid!!!.sig',
+                mockEnv.JWT_SECRET
+            );
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('isTokenRevoked', () => {
+        it('should return false when KV is undefined', async () => {
+            const result = await isTokenRevoked('test-jti', undefined);
+            expect(result).toBe(false);
+        });
+
+        it('should return false when jti is empty', async () => {
+            const kv = createMockKV();
+            const result = await isTokenRevoked('', kv);
+            expect(result).toBe(false);
+        });
+
+        it('should return false when token is not in blacklist', async () => {
+            const kv = createMockKV();
+            const result = await isTokenRevoked('not-revoked-jti', kv);
+            expect(result).toBe(false);
+        });
+
+        it('should return true when token is in blacklist', async () => {
+            const kv = createMockKV();
+            // Add token to blacklist
+            await kv.put('revoked:revoked-jti', '1');
+
+            const result = await isTokenRevoked('revoked-jti', kv);
+            expect(result).toBe(true);
+        });
+
+        it('should return false (fail-open) when KV lookup fails', async () => {
+            const errorKV = {
+                get: async () => { throw new Error('KV error'); },
+                put: async () => {},
+                delete: async () => {},
+                list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
+                getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
+            } as unknown as KVNamespace;
+
+            const result = await isTokenRevoked('test-jti', errorKV);
+            expect(result).toBe(false); // Fail-open for availability
+        });
+    });
+
+    describe('revokeToken', () => {
+        it('should return false when KV is undefined', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const result = await revokeToken('test-jti', now + 3600, undefined);
+            expect(result).toBe(false);
+        });
+
+        it('should return false when jti is empty', async () => {
+            const kv = createMockKV();
+            const now = Math.floor(Date.now() / 1000);
+            const result = await revokeToken('', now + 3600, kv);
+            expect(result).toBe(false);
+        });
+
+        it('should add token to blacklist successfully', async () => {
+            const kv = createMockKV();
+            const now = Math.floor(Date.now() / 1000);
+            const expiresAt = now + 3600;
+
+            const result = await revokeToken('new-jti', expiresAt, kv);
+
+            expect(result).toBe(true);
+            expect(kv._store.get('revoked:new-jti')).toBe('1');
+        });
+
+        it('should use minimum TTL of 60 seconds for nearly expired tokens', async () => {
+            const kv = createMockKV();
+            const now = Math.floor(Date.now() / 1000);
+            const expiresAt = now + 10; // Only 10 seconds until expiry
+
+            const result = await revokeToken('expiring-jti', expiresAt, kv);
+
+            expect(result).toBe(true);
+            // Token should still be stored (TTL enforced as minimum 60 seconds)
+            expect(kv._store.get('revoked:expiring-jti')).toBe('1');
+        });
+
+        it('should return false when KV put fails', async () => {
+            const errorKV = {
+                get: async () => null,
+                put: async () => { throw new Error('KV put error'); },
+                delete: async () => {},
+                list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
+                getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
+            } as unknown as KVNamespace;
+
+            const now = Math.floor(Date.now() / 1000);
+            const result = await revokeToken('test-jti', now + 3600, errorKV);
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('verifyJWTWithRevocationCheck', () => {
+        it('should verify valid non-revoked token', async () => {
+            const kv = createMockKV();
+            const { token } = await createJWT(mockUser, mockEnv);
+
+            const payload = await verifyJWTWithRevocationCheck(token, mockEnv.JWT_SECRET, kv);
+
+            expect(payload.sub).toBe(mockUser.id);
+        });
+
+        it('should throw for revoked token', async () => {
+            const kv = createMockKV();
+            const { token, jti, expires_at } = await createJWT(mockUser, mockEnv);
+
+            // Revoke the token
+            await revokeToken(jti, expires_at, kv);
+
+            await expect(
+                verifyJWTWithRevocationCheck(token, mockEnv.JWT_SECRET, kv)
+            ).rejects.toThrow('Token has been revoked');
+        });
+
+        it('should work without KV (skip revocation check)', async () => {
+            const { token } = await createJWT(mockUser, mockEnv);
+
+            const payload = await verifyJWTWithRevocationCheck(token, mockEnv.JWT_SECRET, undefined);
+
+            expect(payload.sub).toBe(mockUser.id);
+        });
+
+        it('should throw for expired token (regardless of revocation)', async () => {
+            const kv = createMockKV();
+            const { token } = await createJWT(mockUser, mockEnv);
+
+            // Advance time past expiry
+            vi.advanceTimersByTime(3601 * 1000);
+
+            await expect(
+                verifyJWTWithRevocationCheck(token, mockEnv.JWT_SECRET, kv)
+            ).rejects.toThrow('JWT has expired');
+        });
+
+        it('should throw for invalid signature', async () => {
+            const kv = createMockKV();
+            const { token } = await createJWT(mockUser, mockEnv);
+            const wrongSecret = 'wrong-secret-key-for-testing-32chars';
+
+            await expect(
+                verifyJWTWithRevocationCheck(token, wrongSecret, kv)
+            ).rejects.toThrow('Invalid JWT signature');
+        });
+
+        it('should handle token without JTI gracefully', async () => {
+            const kv = createMockKV();
+
+            // Create a token manually without JTI
+            const base64UrlEncode = (data: string): string => {
+                const bytes = new TextEncoder().encode(data);
+                const base64 = btoa(String.fromCharCode(...bytes));
+                return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            };
+
+            const now = Math.floor(Date.now() / 1000);
+            const payload = {
+                sub: '123456789',
+                iat: now,
+                exp: now + 3600,
+                iss: 'http://localhost:8788',
+                username: 'testuser',
+                global_name: 'Test User',
+                avatar: 'abc123hash',
+                // Note: no jti field
+            };
+
+            const header = { alg: 'HS256', typ: 'JWT' };
+            const encodedHeader = base64UrlEncode(JSON.stringify(header));
+            const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+            const signatureInput = `${encodedHeader}.${encodedPayload}`;
+
+            // Sign with the test secret
+            const encoder = new TextEncoder();
+            const keyData = encoder.encode(mockEnv.JWT_SECRET);
+            const key = await crypto.subtle.importKey(
+                'raw',
+                keyData,
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(signatureInput));
+            const sigBytes = new Uint8Array(signature);
+            const base64Sig = btoa(String.fromCharCode(...sigBytes));
+            const encodedSignature = base64Sig.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+            const tokenWithoutJTI = `${signatureInput}.${encodedSignature}`;
+
+            // Should verify successfully (no JTI means no revocation check needed)
+            const verifiedPayload = await verifyJWTWithRevocationCheck(
+                tokenWithoutJTI,
+                mockEnv.JWT_SECRET,
+                kv
+            );
+
+            expect(verifiedPayload.sub).toBe('123456789');
         });
     });
 });

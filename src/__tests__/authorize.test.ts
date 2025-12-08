@@ -3,10 +3,16 @@
  * Tests for the OAuth authorization flow initiation
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { SELF } from './mocks/cloudflare-test.js';
+import { resetRateLimiter } from '../services/rate-limit.js';
 
 describe('Authorize Handler', () => {
+    beforeEach(() => {
+        // Reset rate limiter between tests to avoid 429 errors
+        resetRateLimiter();
+    });
+
     describe('GET /auth/discord', () => {
         it('should require code_challenge parameter', async () => {
             // SECURITY: code_verifier should NOT be accepted - it stays on the client

@@ -4,8 +4,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SELF, env } from './mocks/cloudflare-test.js';
-import { createJWT } from '../services/jwt-service.js';
+import { SELF, env, fetchWithEnv, createEnvWithKV, createMockKV } from './mocks/cloudflare-test.js';
+import { createJWT, revokeToken, isTokenRevoked } from '../services/jwt-service.js';
+import { resetRateLimiter } from '../services/rate-limit.js';
 import type { DiscordUser, Env } from '../types.js';
 
 // Get environment from test context
@@ -28,6 +29,7 @@ describe('Refresh Handler', () => {
         mockUser = createMockUser();
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
+        resetRateLimiter();
     });
 
     afterEach(() => {
@@ -316,9 +318,14 @@ describe('Refresh Handler', () => {
 
     describe('POST /auth/revoke', () => {
         it('should return success for revoke request', async () => {
+            const { token } = await createJWT(mockUser, mockEnv);
+
             const response = await SELF.fetch('http://localhost/auth/revoke', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
                 body: JSON.stringify({}),
             });
 
@@ -326,18 +333,257 @@ describe('Refresh Handler', () => {
 
             expect(response.status).toBe(200);
             expect(json.success).toBe(true);
-            expect(json.message).toContain('revoked');
+            // Message will say "revocation" when KV is not available (test env)
+            // or "revoked successfully" when KV is available (production)
+            expect(json.message.toLowerCase()).toContain('revoc');
         });
 
         it('should return success without body', async () => {
+            const { token } = await createJWT(mockUser, mockEnv);
+
             const response = await SELF.fetch('http://localhost/auth/revoke', {
                 method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
             });
 
             const json = await response.json();
 
             expect(response.status).toBe(200);
             expect(json.success).toBe(true);
+        });
+
+        it('should reject missing Authorization header', async () => {
+            const response = await SELF.fetch('http://localhost/auth/revoke', {
+                method: 'POST',
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('Authorization');
+        });
+
+        it('should reject invalid token signature in revoke', async () => {
+            // Create a token with an invalid signature
+            const forgedToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkiLCJpYXQiOjE3MDQwNjc2MDAsImV4cCI6MTcwNDA3MTIwMCwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4Nzg4IiwidXNlcm5hbWUiOiJ0ZXN0IiwiZ2xvYmFsX25hbWUiOm51bGwsImF2YXRhciI6bnVsbH0.invalid_signature';
+
+            const response = await SELF.fetch('http://localhost/auth/revoke', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${forgedToken}`,
+                },
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('Invalid token');
+        });
+    });
+
+    describe('Token Revocation with KV', () => {
+        it('should successfully revoke token with KV available', async () => {
+            const envWithKV = createEnvWithKV();
+            const { token, jti } = await createJWT(mockUser, envWithKV);
+
+            // Use the token to revoke itself via the API
+            const response = await fetchWithEnv(
+                envWithKV,
+                'http://localhost/auth/revoke',
+                {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            const json = await response.json();
+
+            expect(response.status).toBe(200);
+            expect(json.success).toBe(true);
+            expect(json.revoked).toBe(true);
+            expect(json.message).toContain('revoked successfully');
+
+            // Verify the token JTI is now in the blacklist
+            const isRevoked = await isTokenRevoked(jti, envWithKV.TOKEN_BLACKLIST);
+            expect(isRevoked).toBe(true);
+        });
+
+        it('should reject refresh of revoked token', async () => {
+            const envWithKV = createEnvWithKV();
+            const { token, jti, expires_at } = await createJWT(mockUser, envWithKV);
+
+            // Revoke the token
+            await revokeToken(jti, expires_at, envWithKV.TOKEN_BLACKLIST);
+
+            // Try to refresh the revoked token
+            const response = await fetchWithEnv(
+                envWithKV,
+                'http://localhost/auth/refresh',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token }),
+                }
+            );
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('revoked');
+        });
+
+        it('should reject /me endpoint with revoked token', async () => {
+            const envWithKV = createEnvWithKV();
+            const { token, jti, expires_at } = await createJWT(mockUser, envWithKV);
+
+            // Revoke the token
+            await revokeToken(jti, expires_at, envWithKV.TOKEN_BLACKLIST);
+
+            // Try to use the revoked token
+            const response = await fetchWithEnv(
+                envWithKV,
+                'http://localhost/auth/me',
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('revoked');
+        });
+
+        it('should handle token without JTI (older format) gracefully', async () => {
+            // Create a token manually without JTI by creating a basic payload
+            const base64UrlEncode = (data: string): string => {
+                const bytes = new TextEncoder().encode(data);
+                const base64 = btoa(String.fromCharCode(...bytes));
+                return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            };
+
+            const now = Math.floor(Date.now() / 1000);
+            const payload = {
+                sub: '123456789',
+                iat: now,
+                exp: now + 3600,
+                iss: 'http://localhost:8788',
+                username: 'testuser',
+                global_name: 'Test User',
+                avatar: 'abc123',
+                // Note: no jti field
+            };
+
+            const header = { alg: 'HS256', typ: 'JWT' };
+            const encodedHeader = base64UrlEncode(JSON.stringify(header));
+            const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+            const signatureInput = `${encodedHeader}.${encodedPayload}`;
+
+            // Sign with the test secret
+            const encoder = new TextEncoder();
+            const keyData = encoder.encode(mockEnv.JWT_SECRET);
+            const key = await crypto.subtle.importKey(
+                'raw',
+                keyData,
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(signatureInput));
+            const sigBytes = new Uint8Array(signature);
+            const base64Sig = btoa(String.fromCharCode(...sigBytes));
+            const encodedSignature = base64Sig.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+            const tokenWithoutJTI = `${signatureInput}.${encodedSignature}`;
+
+            const envWithKV = createEnvWithKV();
+
+            // Try to revoke - should succeed but indicate token lacks JTI
+            const response = await fetchWithEnv(
+                envWithKV,
+                'http://localhost/auth/revoke',
+                {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${tokenWithoutJTI}`,
+                    },
+                }
+            );
+
+            const json = await response.json();
+
+            expect(response.status).toBe(200);
+            expect(json.success).toBe(true);
+            expect(json.revoked).toBe(false);
+            expect(json.note).toContain('JTI');
+        });
+
+        it('should indicate when KV blacklist is not configured', async () => {
+            // Use default env without KV
+            const { token } = await createJWT(mockUser, mockEnv);
+
+            const response = await SELF.fetch('http://localhost/auth/revoke', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(200);
+            expect(json.success).toBe(true);
+            expect(json.revoked).toBe(false);
+            expect(json.note).toContain('blacklist not configured');
+        });
+    });
+
+    describe('POST /auth/revoke error handling', () => {
+        it('should handle KV errors gracefully during revocation', async () => {
+            // Create a mock KV that throws errors
+            const errorKV = {
+                get: async () => { throw new Error('KV get failed'); },
+                put: async () => { throw new Error('KV put failed'); },
+                delete: async () => {},
+                list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
+                getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
+            } as unknown as KVNamespace;
+
+            const envWithErrorKV: Env & { TOKEN_BLACKLIST: KVNamespace } = {
+                ...mockEnv,
+                TOKEN_BLACKLIST: errorKV,
+            };
+
+            const { token } = await createJWT(mockUser, envWithErrorKV);
+
+            // Revoke should fail gracefully (returns success=true, revoked=false)
+            const response = await fetchWithEnv(
+                envWithErrorKV,
+                'http://localhost/auth/revoke',
+                {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            const json = await response.json();
+
+            // Should succeed but indicate revocation failed
+            expect(response.status).toBe(200);
+            expect(json.success).toBe(true);
+            expect(json.revoked).toBe(false);
         });
     });
 });

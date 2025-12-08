@@ -126,3 +126,10 @@ function cleanupOldEntries(): void {
     }
   });
 }
+
+/**
+ * Reset the rate limiter (for testing purposes)
+ */
+export function resetRateLimiter(): void {
+  requestLog.clear();
+}
