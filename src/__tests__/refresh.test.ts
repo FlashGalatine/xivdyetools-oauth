@@ -133,7 +133,51 @@ describe('Refresh Handler', () => {
 
             expect(response.status).toBe(401);
             expect(json.success).toBe(false);
-            expect(json.error).toContain('Invalid token format');
+            expect(json.error).toContain('Invalid token');
+        });
+
+        it('should reject forged token with invalid signature (SECURITY)', async () => {
+            // SECURITY TEST: Attacker crafts a token with arbitrary user ID
+            // Even if the payload looks valid and is within grace period,
+            // the signature must match our secret
+            const now = Math.floor(Date.now() / 1000);
+            const forgedPayload = {
+                sub: 'attacker-controlled-user-id',
+                iat: now - 3600,
+                exp: now - 1800, // Expired 30 mins ago (within 24h grace)
+                iss: 'https://xivdyetools-oauth.ashejunius.workers.dev',
+                username: 'victim',
+                global_name: 'Victim User',
+                avatar: null,
+            };
+
+            // Create a "valid-looking" JWT but with wrong signature
+            const base64UrlEncode = (data: string): string => {
+                const bytes = new TextEncoder().encode(data);
+                const base64 = btoa(String.fromCharCode(...bytes));
+                return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            };
+
+            const header = { alg: 'HS256', typ: 'JWT' };
+            const encodedHeader = base64UrlEncode(JSON.stringify(header));
+            const encodedPayload = base64UrlEncode(JSON.stringify(forgedPayload));
+            // Use a fake signature (would require attacker to know our secret)
+            const fakeSignature = 'ZmFrZS1zaWduYXR1cmUtZm9yLXRlc3Rpbmc';
+
+            const forgedToken = `${encodedHeader}.${encodedPayload}.${fakeSignature}`;
+
+            const response = await SELF.fetch('http://localhost/auth/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: forgedToken }),
+            });
+
+            const json = await response.json();
+
+            // Should reject - signature doesn't match our secret
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('Invalid token');
         });
 
         it('should preserve user info in refreshed token', async () => {

@@ -193,6 +193,44 @@ export function decodeJWT(token: string): JWTPayload | null {
 }
 
 /**
+ * Verify JWT signature ONLY (ignores expiration)
+ * Used for token refresh where we allow recently expired tokens
+ *
+ * SECURITY: This verifies the token was signed with our secret,
+ * preventing attackers from forging tokens with arbitrary user IDs.
+ *
+ * @returns payload if signature is valid, null if invalid
+ */
+export async function verifyJWTSignatureOnly(
+  token: string,
+  secret: string
+): Promise<JWTPayload | null> {
+  try {
+    const parts = token.split('.');
+
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const [encodedHeader, encodedPayload, signature] = parts;
+
+    // Verify signature
+    const signatureInput = `${encodedHeader}.${encodedPayload}`;
+    const isValid = await verify(signatureInput, signature, secret);
+
+    if (!isValid) {
+      return null; // Signature invalid - do not trust payload
+    }
+
+    // Signature verified - decode and return payload
+    const payload: JWTPayload = JSON.parse(base64UrlDecode(encodedPayload));
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if a JWT is expired without full verification
  */
 export function isJWTExpired(token: string): boolean {

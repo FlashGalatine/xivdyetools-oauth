@@ -4,7 +4,7 @@
 
 import { Hono } from 'hono';
 import type { Env, RefreshResponse, UserInfoResponse, JWTPayload } from '../types.js';
-import { verifyJWT, createJWT, getAvatarUrl, decodeJWT } from '../services/jwt-service.js';
+import { verifyJWT, createJWT, getAvatarUrl, verifyJWTSignatureOnly } from '../services/jwt-service.js';
 
 export const tokenRouter = new Hono<{ Bindings: Env }>();
 
@@ -49,20 +49,23 @@ tokenRouter.post('/refresh', async (c) => {
     try {
       payload = await verifyJWT(token, c.env.JWT_SECRET);
     } catch (err) {
-      // If expired, decode without verification and check grace period
-      const decoded = decodeJWT(token);
+      // If verification failed (likely expired), verify signature and check grace period
+      // SECURITY: We MUST verify the signature even for expired tokens
+      // to prevent attackers from forging tokens with arbitrary user IDs
+      const decoded = await verifyJWTSignatureOnly(token, c.env.JWT_SECRET);
 
       if (!decoded) {
+        // Signature is invalid OR token is malformed
         return c.json<RefreshResponse>(
           {
             success: false,
-            error: 'Invalid token format',
+            error: 'Invalid token',
           },
           401
         );
       }
 
-      // Allow refresh within 24 hours of expiration
+      // Signature is valid - check grace period
       const now = Math.floor(Date.now() / 1000);
       const gracePeriod = 24 * 60 * 60; // 24 hours
 
@@ -76,8 +79,7 @@ tokenRouter.post('/refresh', async (c) => {
         );
       }
 
-      // Verify signature manually for expired token
-      // Re-create payload for new token
+      // Signature verified, within grace period - use the payload
       payload = decoded;
     }
 
