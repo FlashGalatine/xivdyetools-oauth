@@ -110,6 +110,23 @@ callbackRouter.post('/callback', async (c) => {
   }
 
   try {
+    // The redirect URI used when exchanging the code MUST match the one sent to Discord
+    // during the initial authorize step. That value is always the worker callback URL.
+    const tokenExchangeRedirectUri = `${c.env.WORKER_URL}/auth/callback`;
+
+    // Warn in development if the client tried to send a different redirect URI so we can
+    // spot potential misconfigurations, but always prefer the canonical value for security.
+    if (
+      redirect_uri &&
+      redirect_uri !== tokenExchangeRedirectUri &&
+      c.env.ENVIRONMENT === 'development'
+    ) {
+      console.warn('Ignoring mismatched redirect_uri during token exchange', {
+        provided: redirect_uri,
+        expected: tokenExchangeRedirectUri,
+      });
+    }
+
     // Exchange code for tokens with PKCE verifier
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
@@ -121,7 +138,7 @@ callbackRouter.post('/callback', async (c) => {
         client_secret: c.env.DISCORD_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: redirect_uri || `${c.env.FRONTEND_URL}/auth/callback`,
+        redirect_uri: tokenExchangeRedirectUri,
         code_verifier,
       }),
     });

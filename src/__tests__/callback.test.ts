@@ -332,12 +332,12 @@ describe('Callback Handler', () => {
             expect(json.user.avatar_url).toContain('cdn.discordapp.com');
         });
 
-        it('should handle custom redirect_uri', async () => {
+        it('should ignore custom redirect_uri and use worker callback', async () => {
             globalThis.fetch = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
                 if (url.includes('oauth2/token')) {
-                    // Verify redirect_uri is passed correctly
+                    // Verify redirect_uri is forced to the worker callback (matches authorize step)
                     const body = options?.body?.toString() || '';
-                    expect(body).toContain('redirect_uri=');
+                    expect(body).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A8788%2Fauth%2Fcallback');
 
                     return Promise.resolve(new Response(JSON.stringify({
                         access_token: 'token',
