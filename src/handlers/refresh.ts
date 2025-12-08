@@ -4,7 +4,15 @@
 
 import { Hono } from 'hono';
 import type { Env, RefreshResponse, UserInfoResponse, JWTPayload } from '../types.js';
-import { verifyJWT, createJWT, getAvatarUrl, verifyJWTSignatureOnly } from '../services/jwt-service.js';
+import {
+  verifyJWT,
+  createJWT,
+  getAvatarUrl,
+  verifyJWTSignatureOnly,
+  verifyJWTWithRevocationCheck,
+  revokeToken,
+  isTokenRevoked,
+} from '../services/jwt-service.js';
 
 export const tokenRouter = new Hono<{ Bindings: Env }>();
 
@@ -83,16 +91,32 @@ tokenRouter.post('/refresh', async (c) => {
       payload = decoded;
     }
 
-    // Create new JWT with same user info
+    // Check if the old token was revoked (if it has JTI)
+    if (payload.jti && c.env.TOKEN_BLACKLIST) {
+      const wasRevoked = await isTokenRevoked(payload.jti, c.env.TOKEN_BLACKLIST);
+      if (wasRevoked) {
+        return c.json<RefreshResponse>(
+          {
+            success: false,
+            error: 'Token has been revoked',
+          },
+          401
+        );
+      }
+    }
+
+    // Create new JWT with same user info and new JTI
     const expirySeconds = parseInt(c.env.JWT_EXPIRY, 10) || 3600;
     const now = Math.floor(Date.now() / 1000);
     const newExpiry = now + expirySeconds;
+    const newJti = crypto.randomUUID();
 
     const newPayload: JWTPayload = {
       sub: payload.sub,
       iat: now,
       exp: newExpiry,
       iss: c.env.WORKER_URL,
+      jti: newJti,
       username: payload.username,
       global_name: payload.global_name,
       avatar: payload.avatar,
@@ -142,7 +166,12 @@ tokenRouter.get('/me', async (c) => {
   const token = authHeader.slice(7);
 
   try {
-    const payload = await verifyJWT(token, c.env.JWT_SECRET);
+    // Use revocation-aware verification if KV is available
+    const payload = await verifyJWTWithRevocationCheck(
+      token,
+      c.env.JWT_SECRET,
+      c.env.TOKEN_BLACKLIST
+    );
 
     return c.json<UserInfoResponse>({
       success: true,
@@ -169,18 +198,80 @@ tokenRouter.get('/me', async (c) => {
 
 /**
  * POST /auth/revoke
- * Logout - invalidate token (for stateless JWTs, this is a no-op on server)
- * Client should clear their stored token
+ * Logout - invalidate token by adding JTI to blacklist
+ *
+ * Headers:
+ * - Authorization: Bearer <token>
+ *
+ * If KV namespace is configured, adds the token's JTI to the blacklist.
+ * Token will be rejected by /auth/me and other endpoints until it expires naturally.
  */
 tokenRouter.post('/revoke', async (c) => {
-  // For stateless JWTs, we can't truly revoke
-  // The client is responsible for clearing the token
-  // In future, could add token ID to a blacklist with TTL
+  const authHeader = c.req.header('Authorization');
 
-  return c.json({
-    success: true,
-    message: 'Token revoked. Please clear client-side storage.',
-  });
+  if (!authHeader?.startsWith('Bearer ')) {
+    return c.json(
+      {
+        success: false,
+        error: 'Missing or invalid Authorization header',
+      },
+      401
+    );
+  }
+
+  const token = authHeader.slice(7);
+
+  try {
+    // Verify the token is valid (we need jti and exp from payload)
+    const payload = await verifyJWTSignatureOnly(token, c.env.JWT_SECRET);
+
+    if (!payload) {
+      return c.json(
+        {
+          success: false,
+          error: 'Invalid token',
+        },
+        401
+      );
+    }
+
+    // Attempt to revoke if KV is available and token has JTI
+    if (payload.jti && c.env.TOKEN_BLACKLIST) {
+      const revoked = await revokeToken(
+        payload.jti,
+        payload.exp,
+        c.env.TOKEN_BLACKLIST
+      );
+
+      if (revoked) {
+        return c.json({
+          success: true,
+          message: 'Token revoked successfully',
+          revoked: true,
+        });
+      }
+    }
+
+    // Fallback: KV not available or no JTI, client should still clear token
+    return c.json({
+      success: true,
+      message: 'Token marked for revocation. Please clear client-side storage.',
+      revoked: false,
+      note: c.env.TOKEN_BLACKLIST
+        ? 'Token lacks JTI claim (older token format)'
+        : 'Token blacklist not configured',
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Revocation failed';
+
+    return c.json(
+      {
+        success: false,
+        error: message,
+      },
+      500
+    );
+  }
 });
 
 /**

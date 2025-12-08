@@ -16,6 +16,9 @@ export interface Env {
   // Secrets
   DISCORD_CLIENT_SECRET: string;
   JWT_SECRET: string;
+
+  // KV Namespaces (optional for backward compatibility)
+  TOKEN_BLACKLIST?: KVNamespace;
 }
 
 /**
@@ -60,6 +63,7 @@ export interface JWTPayload {
   iat: number; // Issued at timestamp
   exp: number; // Expiration timestamp
   iss: string; // Issuer (worker URL)
+  jti?: string; // JWT ID for revocation (optional for backward compat)
 
   // Custom claims
   username: string;

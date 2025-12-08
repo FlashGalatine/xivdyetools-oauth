@@ -26,6 +26,16 @@ JWT_EXPIRY = "3600"
 name = "xivdyetools-oauth-dev"
 vars = { ENVIRONMENT = "development", DISCORD_CLIENT_ID = "1447108133020369048", FRONTEND_URL = "http://localhost:5173", WORKER_URL = "http://localhost:8788", JWT_EXPIRY = "3600" }
 
+# KV Namespace for token revocation blacklist
+[[kv_namespaces]]
+binding = "TOKEN_BLACKLIST"
+id = "placeholder-create-with-wrangler"  # Create with: wrangler kv:namespace create TOKEN_BLACKLIST
+
+# Development KV namespace
+[env.development.kv_namespaces]
+binding = "TOKEN_BLACKLIST"
+preview_id = "placeholder-create-with-wrangler"  # Create with: wrangler kv:namespace create TOKEN_BLACKLIST --preview
+
 # Secrets (set via `wrangler secret put <NAME>`)
 # Required:
 #   DISCORD_CLIENT_SECRET - Discord OAuth client secret

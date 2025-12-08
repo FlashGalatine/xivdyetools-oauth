@@ -101,20 +101,25 @@ async function verify(
 
 /**
  * Create a JWT for a Discord user
+ * Includes jti (JWT ID) claim for token revocation support
  */
 export async function createJWT(
   user: DiscordUser,
   env: Env
-): Promise<{ token: string; expires_at: number }> {
+): Promise<{ token: string; expires_at: number; jti: string }> {
   const now = Math.floor(Date.now() / 1000);
   const expirySeconds = parseInt(env.JWT_EXPIRY, 10) || 3600;
   const expiresAt = now + expirySeconds;
+
+  // Generate unique token ID for revocation tracking
+  const jti = crypto.randomUUID();
 
   const payload: JWTPayload = {
     sub: user.id,
     iat: now,
     exp: expiresAt,
     iss: env.WORKER_URL,
+    jti,
     username: user.username,
     global_name: user.global_name,
     avatar: user.avatar,
@@ -137,7 +142,7 @@ export async function createJWT(
   // Combine into JWT
   const token = `${signatureInput}.${signature}`;
 
-  return { token, expires_at: expiresAt };
+  return { token, expires_at: expiresAt, jti };
 }
 
 /**
@@ -252,4 +257,69 @@ export function getAvatarUrl(
 
   const format = avatarHash.startsWith('a_') ? 'gif' : 'png';
   return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${format}`;
+}
+
+/**
+ * Check if a token has been revoked
+ * Uses KV to store revoked token JTIs
+ */
+export async function isTokenRevoked(
+  jti: string,
+  kv: KVNamespace | undefined
+): Promise<boolean> {
+  if (!kv || !jti) return false;
+
+  try {
+    const revoked = await kv.get(`revoked:${jti}`);
+    return revoked !== null;
+  } catch {
+    // If KV lookup fails, allow token (fail-open for availability)
+    return false;
+  }
+}
+
+/**
+ * Revoke a token by adding its JTI to the blacklist
+ * TTL matches token expiry to auto-cleanup expired entries
+ */
+export async function revokeToken(
+  jti: string,
+  expiresAt: number,
+  kv: KVNamespace | undefined
+): Promise<boolean> {
+  if (!kv || !jti) return false;
+
+  try {
+    // Calculate TTL - how long until token would expire naturally
+    const now = Math.floor(Date.now() / 1000);
+    const ttl = Math.max(expiresAt - now, 60); // Minimum 60 seconds
+
+    await kv.put(`revoked:${jti}`, '1', { expirationTtl: ttl });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verify JWT with revocation check
+ * Combines signature/expiry verification with blacklist check
+ */
+export async function verifyJWTWithRevocationCheck(
+  token: string,
+  secret: string,
+  kv: KVNamespace | undefined
+): Promise<JWTPayload> {
+  // First, verify signature and expiration
+  const payload = await verifyJWT(token, secret);
+
+  // Then check revocation if KV is available and token has JTI
+  if (payload.jti && kv) {
+    const revoked = await isTokenRevoked(payload.jti, kv);
+    if (revoked) {
+      throw new Error('Token has been revoked');
+    }
+  }
+
+  return payload;
 }
