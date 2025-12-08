@@ -29,12 +29,13 @@ vars = { ENVIRONMENT = "development", DISCORD_CLIENT_ID = "1447108133020369048",
 # KV Namespace for token revocation blacklist
 [[kv_namespaces]]
 binding = "TOKEN_BLACKLIST"
-id = "placeholder-create-with-wrangler"  # Create with: wrangler kv:namespace create TOKEN_BLACKLIST
+id = "0d6f3be3b4704e91a83e6387b9769e45"  # Production KV namespace for token revocation
 
 # Development KV namespace
-[env.development.kv_namespaces]
+[[env.development.kv_namespaces]]
 binding = "TOKEN_BLACKLIST"
-preview_id = "placeholder-create-with-wrangler"  # Create with: wrangler kv:namespace create TOKEN_BLACKLIST --preview
+id = "891bbbe834ba4055a06b672b589094be"
+preview_id = "3d9eafa9aac64f18a1e9c56b228b4b68"  # Development preview KV namespace for token revocation
 
 # Secrets (set via `wrangler secret put <NAME>`)
 # Required:

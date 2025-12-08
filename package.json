@@ -24,7 +24,7 @@
     "typescript": "^5.7.2",
     "vitest": "^2.1.9",
     "vitest-environment-miniflare": "^2.14.4",
-    "wrangler": "^3.93.0"
+    "wrangler": "^4.53.0"
   },
   "engines": {
     "node": ">=18.0.0"
