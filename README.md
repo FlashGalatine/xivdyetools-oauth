@@ -1,6 +1,6 @@
 # XIV Dye Tools OAuth Worker
 
-> Cloudflare Worker that handles Discord OAuth authentication for the XIV Dye Tools ecosystem.
+**v1.1.0** | Cloudflare Worker that handles Discord OAuth authentication for the XIV Dye Tools ecosystem.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue)](https://www.typescriptlang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020)](https://workers.cloudflare.com/)
