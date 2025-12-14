@@ -23,7 +23,10 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', logger());
 
 // CORS configuration
-// SECURITY: Allow specific origins plus any localhost port for development
+// SECURITY: Allow specific origins plus whitelisted localhost ports for development
+// OAUTH-SEC-001: Restrict localhost to specific ports to prevent malicious localhost apps
+const ALLOWED_LOCALHOST_PORTS = ['3000', '5173', '8787'];
+
 app.use(
   '*',
   cors({
@@ -38,10 +41,18 @@ app.use(
         return origin;
       }
 
-      // Allow any localhost port for development flexibility
-      const localhostPattern = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-      if (localhostPattern.test(origin)) {
-        return origin;
+      // Allow specific localhost ports for development
+      // SECURITY: Only whitelisted ports to prevent malicious localhost apps from accessing OAuth
+      try {
+        const url = new URL(origin);
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+          // Must have a port and it must be in our whitelist
+          if (url.port && ALLOWED_LOCALHOST_PORTS.includes(url.port)) {
+            return origin;
+          }
+        }
+      } catch {
+        // Invalid URL - not allowed
       }
 
       // Not allowed
