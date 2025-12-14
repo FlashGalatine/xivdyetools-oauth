@@ -12,8 +12,16 @@ import { callbackRouter } from './handlers/callback.js';
 import { tokenRouter } from './handlers/refresh.js';
 import { xivauthRouter } from './handlers/xivauth.js';
 import { checkRateLimit, getClientIp } from './services/rate-limit.js';
+import { validateEnv, logValidationErrors } from './utils/env-validation.js';
+import { requestIdMiddleware, getRequestId, type RequestIdVariables } from './middleware/request-id.js';
 
-const app = new Hono<{ Bindings: Env }>();
+// Define context variables type
+type Variables = RequestIdVariables;
+
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// Track if we've validated env in this isolate
+let envValidated = false;
 
 // ============================================
 // MIDDLEWARE
@@ -21,6 +29,28 @@ const app = new Hono<{ Bindings: Env }>();
 
 // Request logging
 app.use('*', logger());
+
+// Request ID middleware (must be early for tracing)
+app.use('*', requestIdMiddleware);
+
+// Environment validation middleware
+// Validates required env vars once per isolate and caches result
+app.use('*', async (c, next) => {
+  if (!envValidated) {
+    const result = validateEnv(c.env);
+    envValidated = true;
+    if (!result.valid) {
+      logValidationErrors(result.errors);
+      // In production, fail fast on misconfiguration
+      if (c.env.ENVIRONMENT === 'production') {
+        return c.json({ error: 'Service misconfigured' }, 500);
+      }
+      // In development, log warnings but continue
+      console.warn('Continuing with invalid env configuration (development mode)');
+    }
+  }
+  await next();
+});
 
 // CORS configuration
 // SECURITY: Allow specific origins plus whitelisted localhost ports for development
@@ -65,6 +95,20 @@ app.use(
     credentials: true,
   })
 );
+
+// Security headers middleware
+// Applies to all responses (after handler execution)
+app.use('*', async (c, next) => {
+  await next();
+  // Prevent MIME-type sniffing attacks
+  c.header('X-Content-Type-Options', 'nosniff');
+  // Prevent clickjacking by denying iframe embedding
+  c.header('X-Frame-Options', 'DENY');
+  // Enforce HTTPS for 1 year (only in production)
+  if (c.env.ENVIRONMENT === 'production') {
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+});
 
 // Rate limiting middleware for auth endpoints
 // Protects against brute force and credential stuffing attacks
@@ -158,15 +202,17 @@ app.notFound((c) => {
 
 // Global error handler
 app.onError((err, c) => {
+  const requestId = getRequestId(c);
   // Sanitize logs in production - only log error name and message, not full stack
   const isDev = c.env.ENVIRONMENT === 'development';
   const logMessage = isDev ? err : { name: err.name, message: err.message };
-  console.error('Unhandled error:', logMessage);
+  console.error(`[${requestId}] Unhandled error:`, logMessage);
 
   return c.json(
     {
       error: 'Internal Server Error',
       message: c.env.ENVIRONMENT === 'development' ? err.message : 'An error occurred',
+      requestId,
     },
     500
   );
