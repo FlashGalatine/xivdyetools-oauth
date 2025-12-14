@@ -120,6 +120,20 @@ callbackRouter.post('/callback', async (c) => {
     );
   }
 
+  // SECURITY: Validate code_verifier format (RFC 7636)
+  // Must be 43-128 characters using only unreserved characters: [A-Za-z0-9-._~]
+  // This is defense in depth - Discord also validates this
+  const verifierRegex = /^[A-Za-z0-9\-._~]{43,128}$/;
+  if (!verifierRegex.test(code_verifier)) {
+    return c.json<AuthResponse>(
+      {
+        success: false,
+        error: 'Invalid code_verifier format',
+      },
+      400
+    );
+  }
+
   try {
     // The redirect URI used when exchanging the code MUST match the one sent to Discord
     // during the initial authorize step. That value is always the worker callback URL.

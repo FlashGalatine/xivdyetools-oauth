@@ -38,6 +38,20 @@ authorizeRouter.get('/discord', (c) => {
     );
   }
 
+  // SECURITY: Validate code_challenge format (RFC 7636)
+  // For S256 method, challenge is BASE64URL(SHA256(verifier)) = 43 characters
+  // Allow some flexibility (43-128 chars) for edge cases, using base64url charset
+  const challengeRegex = /^[A-Za-z0-9\-_]{43,128}$/;
+  if (!challengeRegex.test(code_challenge)) {
+    return c.json(
+      {
+        error: 'Invalid code_challenge format',
+        message: 'code_challenge must be a valid base64url-encoded value',
+      },
+      400
+    );
+  }
+
   if (code_challenge_method && code_challenge_method !== 'S256') {
     return c.json(
       {
