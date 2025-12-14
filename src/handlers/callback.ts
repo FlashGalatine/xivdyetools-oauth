@@ -51,6 +51,8 @@ callbackRouter.get('/callback', async (c) => {
     code_challenge: string;
     redirect_uri: string;
     return_path: string;
+    iat?: number;
+    exp?: number;
   };
 
   try {
@@ -58,6 +60,14 @@ callbackRouter.get('/callback', async (c) => {
   } catch {
     const redirectUrl = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
     redirectUrl.searchParams.set('error', 'Invalid state parameter');
+    return c.redirect(redirectUrl.toString());
+  }
+
+  // SECURITY: Validate state expiration to prevent replay attacks
+  const now = Math.floor(Date.now() / 1000);
+  if (stateData.exp && stateData.exp < now) {
+    const redirectUrl = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
+    redirectUrl.searchParams.set('error', 'OAuth state expired. Please try logging in again.');
     return c.redirect(redirectUrl.toString());
   }
 
@@ -164,6 +174,19 @@ callbackRouter.post('/callback', async (c) => {
 
     const tokens: DiscordTokenResponse = await tokenResponse.json();
 
+    // SECURITY: Validate that we received the required 'identify' scope
+    // This ensures the token has the permissions we need
+    if (!tokens.scope || !tokens.scope.includes('identify')) {
+      console.error('Token missing required identify scope', { scope: tokens.scope });
+      return c.json<AuthResponse>(
+        {
+          success: false,
+          error: 'Token missing required permissions',
+        },
+        401
+      );
+    }
+
     // Fetch user info
     const userResponse = await fetch('https://discord.com/api/users/@me', {
       headers: {
@@ -182,6 +205,22 @@ callbackRouter.post('/callback', async (c) => {
     }
 
     const discordUser: DiscordUser = await userResponse.json();
+
+    // SECURITY: Validate required user fields exist
+    // Protects against malformed responses or unexpected API changes
+    if (!discordUser.id || !discordUser.username) {
+      console.error('Discord user response missing required fields', {
+        hasId: !!discordUser.id,
+        hasUsername: !!discordUser.username,
+      });
+      return c.json<AuthResponse>(
+        {
+          success: false,
+          error: 'Invalid user data received',
+        },
+        401
+      );
+    }
 
     // Find or create user in database
     const user = await findOrCreateUser(c.env.DB, {

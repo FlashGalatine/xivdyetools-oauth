@@ -79,11 +79,14 @@ authorizeRouter.get('/discord', (c) => {
 
   // Generate state with only safe data (NO code_verifier!)
   // The code_verifier is kept on the client and sent via POST callback
+  const now = Math.floor(Date.now() / 1000);
   const stateData = {
     csrf: state || crypto.randomUUID(),
     code_challenge, // Store for logging/debugging only
     redirect_uri: finalRedirectUri,
     return_path: return_path || '/',
+    iat: now, // Issued at timestamp
+    exp: now + 600, // 10 minute expiration (OAuth flow should complete quickly)
   };
 
   // Encode state as base64
