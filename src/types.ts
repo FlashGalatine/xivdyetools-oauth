@@ -76,29 +76,50 @@ export interface XIVAuthTokenResponse {
 }
 
 /**
- * XIVAuth character object
+ * XIVAuth character object from /api/v1/characters
  */
 export interface XIVAuthCharacter {
   id: number; // Lodestone ID
   name: string;
-  server: string;
+  home_world: string; // XIVAuth uses home_world, not server
   verified: boolean;
 }
 
 /**
+ * XIVAuth character registration from /api/v1/characters (full response)
+ */
+export interface XIVAuthCharacterRegistration {
+  lodestone_id: number;
+  name: string;
+  home_world: string;
+  data_center: string;
+  verified: boolean;
+}
+
+/**
+ * XIVAuth social identity from /api/v1/user
+ */
+export interface XIVAuthSocialIdentity {
+  provider: string; // e.g., 'discord'
+  external_id: string; // e.g., Discord snowflake
+  name: string | null;
+  nickname: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * XIVAuth user object from /api/v1/user
+ * NOTE: This is the ACTUAL response structure from XIVAuth
  */
 export interface XIVAuthUser {
   id: string; // XIVAuth UUID
-  username: string;
-  avatar_url: string | null;
-  social?: {
-    discord?: {
-      id: string; // Discord snowflake
-      username: string;
-    };
-  };
-  characters?: XIVAuthCharacter[];
+  // NOTE: XIVAuth does NOT return username or avatar_url in user endpoint
+  social_identities?: XIVAuthSocialIdentity[]; // Array of linked accounts (Discord, etc.)
+  mfa_enabled: boolean;
+  verified_characters: boolean; // Boolean indicating if user has any verified characters
+  created_at: string;
+  updated_at: string;
 }
 
 /**

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1-beta] - 2025-12-13
+
+### Fixed
+
+#### XIVAuth Integration Bug Fixes
+- **406 Not Acceptable Error**: Added required `Accept: application/json` header to XIVAuth API calls (Rails API requirement)
+- **Response Format Mismatch**: Updated types and handler to match actual XIVAuth API response structure
+  - XIVAuth user endpoint returns `social_identities[]` array, not `social.discord` object
+  - XIVAuth user endpoint does NOT return `username` or `avatar_url` fields
+  - `verified_characters` is a boolean, not an array
+- **Separate Characters Fetch**: Characters must be fetched from `/api/v1/characters` endpoint (not included in user response)
+- **D1 Database Error**: Fixed `undefined` values being passed to D1 by providing proper fallbacks
+- **Username Handling**: Now uses primary character name as username, or `XIVAuth User {id}` as fallback
+- **Field Mapping**: Properly map XIVAuth's `home_world` field to `server`
+
+### Changed
+- Updated `XIVAuthUser` type to match actual API response structure
+- Added `XIVAuthSocialIdentity` type for the social identities array
+- Added `XIVAuthCharacterRegistration` type for characters endpoint response
+- Enhanced logging for debugging XIVAuth integration issues
+
 ## [2.0.0-beta] - 2025-12-13
 
 ### Added
