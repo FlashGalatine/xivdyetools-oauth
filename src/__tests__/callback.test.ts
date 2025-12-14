@@ -325,8 +325,9 @@ describe('Callback Handler', () => {
             expect(json.success).toBe(true);
             expect(json.token).toBeTruthy();
             expect(json.expires_at).toBeTruthy();
+            // user.id is now our internal database UUID, not the Discord ID
+            expect(json.user.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
             expect(json.user).toMatchObject({
-                id: '123456789',
                 username: 'testuser',
                 global_name: 'Test User',
                 avatar: 'abc123',
