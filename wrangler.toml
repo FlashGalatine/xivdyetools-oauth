@@ -16,6 +16,7 @@ local_protocol = "http"
 [vars]
 ENVIRONMENT = "production"
 DISCORD_CLIENT_ID = "1447108133020369048"
+XIVAUTH_CLIENT_ID = "phx-sXZeb_Ran6GAdcnsnjvdtOeNM4df0BZyF3Jyti0"
 FRONTEND_URL = "https://xivdyetools.projectgalatine.com"
 WORKER_URL = "https://xivdyetools-oauth.ashejunius.workers.dev"
 # JWT expiry in seconds (1 hour)
@@ -24,7 +25,7 @@ JWT_EXPIRY = "3600"
 # Development environment (use: wrangler dev --env development)
 [env.development]
 name = "xivdyetools-oauth-dev"
-vars = { ENVIRONMENT = "development", DISCORD_CLIENT_ID = "1447108133020369048", FRONTEND_URL = "http://localhost:5173", WORKER_URL = "http://localhost:8788", JWT_EXPIRY = "3600" }
+vars = { ENVIRONMENT = "development", DISCORD_CLIENT_ID = "1447108133020369048", XIVAUTH_CLIENT_ID = "phx-sXZeb_Ran6GAdcnsnjvdtOeNM4df0BZyF3Jyti0", FRONTEND_URL = "http://localhost:5173", WORKER_URL = "http://localhost:8788", JWT_EXPIRY = "3600" }
 
 # KV Namespace for token revocation blacklist
 [[kv_namespaces]]
@@ -37,9 +38,26 @@ binding = "TOKEN_BLACKLIST"
 id = "891bbbe834ba4055a06b672b589094be"
 preview_id = "3d9eafa9aac64f18a1e9c56b228b4b68"  # Development preview KV namespace for token revocation
 
+# D1 Database for user management
+# Create with: wrangler d1 create xivdyetools-users
+# Apply schema: wrangler d1 execute xivdyetools-users --file=./schema/users.sql
+
+[[d1_databases]]
+binding = "DB"
+database_name = "xivdyetools-users"
+database_id = "6e97b759-70dd-49a8-a93c-0541c7fe6c67"
+
+# Development D1 database
+# Create with: wrangler d1 create xivdyetools-users-dev
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "xivdyetools-users-dev"
+database_id = "TODO_RUN_WRANGLER_D1_CREATE"  # Replace after running: wrangler d1 create xivdyetools-users-dev
+
 # Secrets (set via `wrangler secret put <NAME>`)
 # Required:
 #   DISCORD_CLIENT_SECRET - Discord OAuth client secret
 #   JWT_SECRET - Shared secret for signing JWTs (also configure in presets worker)
+#   XIVAUTH_CLIENT_SECRET - XIVAuth OAuth client secret
 #
 # Generate JWT_SECRET with: openssl rand -hex 32

@@ -5,7 +5,8 @@
 
 import { Hono } from 'hono';
 import type { Env, DiscordTokenResponse, DiscordUser, AuthResponse } from '../types.js';
-import { createJWT, getAvatarUrl } from '../services/jwt-service.js';
+import { createJWTForUser, getAvatarUrl } from '../services/jwt-service.js';
+import { findOrCreateUser } from '../services/user-service.js';
 
 export const callbackRouter = new Hono<{ Bindings: Env }>();
 
@@ -182,18 +183,32 @@ callbackRouter.post('/callback', async (c) => {
 
     const discordUser: DiscordUser = await userResponse.json();
 
-    // Create our JWT
-    const { token, expires_at } = await createJWT(discordUser, c.env);
+    // Find or create user in database
+    const user = await findOrCreateUser(c.env.DB, {
+      discord_id: discordUser.id,
+      xivauth_id: null, // Discord login doesn't provide XIVAuth ID
+      username: discordUser.global_name || discordUser.username,
+      avatar_url: getAvatarUrl(discordUser.id, discordUser.avatar),
+      auth_provider: 'discord',
+    });
+
+    // Create our JWT with the database user
+    const { token, expires_at } = await createJWTForUser(user, c.env, {
+      auth_provider: 'discord',
+      global_name: discordUser.global_name,
+      avatar: discordUser.avatar,
+    });
 
     return c.json<AuthResponse>({
       success: true,
       token,
       user: {
-        id: discordUser.id,
+        id: user.id, // Now returns our internal user ID
         username: discordUser.username,
         global_name: discordUser.global_name,
         avatar: discordUser.avatar,
         avatar_url: getAvatarUrl(discordUser.id, discordUser.avatar),
+        auth_provider: 'discord',
       },
       expires_at,
     });

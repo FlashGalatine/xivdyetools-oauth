@@ -10,6 +10,7 @@ import type { Env } from './types.js';
 import { authorizeRouter } from './handlers/authorize.js';
 import { callbackRouter } from './handlers/callback.js';
 import { tokenRouter } from './handlers/refresh.js';
+import { xivauthRouter } from './handlers/xivauth.js';
 import { checkRateLimit, getClientIp } from './services/rate-limit.js';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -105,9 +106,10 @@ app.get('/health', (c) => {
 });
 
 // Mount routers
-app.route('/auth', authorizeRouter);
-app.route('/auth', callbackRouter);
-app.route('/auth', tokenRouter);
+app.route('/auth', authorizeRouter);  // Discord OAuth initiation
+app.route('/auth', callbackRouter);   // Discord OAuth callback
+app.route('/auth', xivauthRouter);    // XIVAuth OAuth (initiation + callback)
+app.route('/auth', tokenRouter);      // Token refresh/revoke
 
 // ============================================
 // ERROR HANDLING

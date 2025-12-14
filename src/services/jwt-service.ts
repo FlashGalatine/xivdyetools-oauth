@@ -6,7 +6,7 @@
  * Compatible with Cloudflare Workers (no Node.js crypto required)
  */
 
-import type { JWTPayload, DiscordUser, Env } from '../types.js';
+import type { JWTPayload, DiscordUser, Env, UserRow, AuthProvider, PrimaryCharacter } from '../types.js';
 
 /**
  * Base64URL encode a string or ArrayBuffer
@@ -100,8 +100,9 @@ async function verify(
 }
 
 /**
- * Create a JWT for a Discord user
+ * Create a JWT for a Discord user (legacy function, kept for backwards compatibility)
  * Includes jti (JWT ID) claim for token revocation support
+ * @deprecated Use createJWTForUser instead for multi-provider support
  */
 export async function createJWT(
   user: DiscordUser,
@@ -123,6 +124,76 @@ export async function createJWT(
     username: user.username,
     global_name: user.global_name,
     avatar: user.avatar,
+    auth_provider: 'discord',
+    discord_id: user.id,
+  };
+
+  // JWT Header
+  const header = {
+    alg: 'HS256',
+    typ: 'JWT',
+  };
+
+  // Encode header and payload
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+
+  // Create signature
+  const signatureInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = await sign(signatureInput, env.JWT_SECRET);
+
+  // Combine into JWT
+  const token = `${signatureInput}.${signature}`;
+
+  return { token, expires_at: expiresAt, jti };
+}
+
+/**
+ * Extra options for JWT creation from a database user
+ */
+export interface CreateJWTForUserOptions {
+  auth_provider?: AuthProvider;
+  primary_character?: PrimaryCharacter;
+  global_name?: string | null;
+  avatar?: string | null;
+}
+
+/**
+ * Create a JWT for a database user (supports both Discord and XIVAuth)
+ * This is the preferred method for multi-provider authentication
+ */
+export async function createJWTForUser(
+  user: UserRow,
+  env: Env,
+  options?: CreateJWTForUserOptions
+): Promise<{ token: string; expires_at: number; jti: string }> {
+  const now = Math.floor(Date.now() / 1000);
+  const expirySeconds = parseInt(env.JWT_EXPIRY, 10) || 3600;
+  const expiresAt = now + expirySeconds;
+
+  // Generate unique token ID for revocation tracking
+  const jti = crypto.randomUUID();
+
+  const payload: JWTPayload = {
+    // Standard claims
+    sub: user.id, // Our internal user ID
+    iat: now,
+    exp: expiresAt,
+    iss: env.WORKER_URL,
+    jti,
+
+    // User info
+    username: user.username,
+    global_name: options?.global_name ?? null,
+    avatar: options?.avatar ?? null,
+
+    // Multi-provider support
+    auth_provider: options?.auth_provider ?? (user.auth_provider as AuthProvider),
+    discord_id: user.discord_id ?? undefined,
+    xivauth_id: user.xivauth_id ?? undefined,
+
+    // XIVAuth-specific
+    primary_character: options?.primary_character,
   };
 
   // JWT Header

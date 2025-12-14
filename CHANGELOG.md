@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-beta] - 2025-12-13
+
+### Added
+
+#### XIVAuth OAuth Provider
+- **XIVAuth Integration**: Second OAuth provider alongside Discord
+- **GET /auth/xivauth**: Initiate XIVAuth OAuth flow with PKCE
+- **GET /auth/xivauth/callback**: Handle XIVAuth redirect
+- **POST /auth/xivauth/callback**: Exchange code for tokens with PKCE verification
+- **Scopes Supported**: `user`, `user:social`, `character`, `refresh`
+- **Character Info**: Primary FFXIV character included in JWT for XIVAuth users
+
+#### D1 Database Integration
+- **User Management**: Cloudflare D1 database for persistent user storage
+- **User Service**: `findOrCreateUser()`, `findUserById()`, `storeCharacters()`
+- **Account Merging**: Automatic account linking when Discord ID matches between providers
+- **Schema**: `users` table (id, discord_id, xivauth_id, auth_provider, username, avatar_url)
+- **Schema**: `xivauth_characters` table (lodestone_id, name, server, verified)
+
+#### Multi-Provider JWT Support
+- **createJWTForUser()**: New JWT creation function supporting both providers
+- **Extended Payload**: `auth_provider`, `discord_id`, `xivauth_id`, `primary_character` claims
+- **Provider Detection**: Automatic provider identification from token
+
+### Changed
+
+- **Discord Callback**: Updated to use D1 database and `createJWTForUser()`
+- **Internal User IDs**: JWT `sub` claim now uses internal UUID instead of Discord ID
+- **Optional Client Secret**: XIVAuth supports public client mode (PKCE-only)
+
+### Technical Details
+
+- **Cloudflare D1**: SQLite-compatible database at the edge
+- **PKCE Security**: Required for both Discord and XIVAuth flows
+- **Confidential Client**: Optional client secret for XIVAuth (recommended for server-side)
+
 ## [1.1.0] - 2025-12-07
 
 ### Added
