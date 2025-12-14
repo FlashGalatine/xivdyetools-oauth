@@ -10,8 +10,9 @@ import type { JWTPayload, DiscordUser, Env, UserRow, AuthProvider, PrimaryCharac
 
 /**
  * Base64URL encode a string or ArrayBuffer
+ * OAUTH-REF-002: Exported for reuse in refresh.ts to avoid duplication
  */
-function base64UrlEncode(data: string | ArrayBuffer): string {
+export function base64UrlEncode(data: string | ArrayBuffer): string {
   let base64: string;
 
   if (typeof data === 'string') {
@@ -69,8 +70,9 @@ async function getSigningKey(secret: string): Promise<CryptoKey> {
 
 /**
  * Sign data with HMAC-SHA256
+ * OAUTH-REF-002: Exported for reuse in refresh.ts to avoid duplication
  */
-async function sign(data: string, secret: string): Promise<string> {
+export async function signJwtData(data: string, secret: string): Promise<string> {
   const key = await getSigningKey(secret);
   const encoder = new TextEncoder();
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
@@ -140,7 +142,7 @@ export async function createJWT(
 
   // Create signature
   const signatureInput = `${encodedHeader}.${encodedPayload}`;
-  const signature = await sign(signatureInput, env.JWT_SECRET);
+  const signature = await signJwtData(signatureInput, env.JWT_SECRET);
 
   // Combine into JWT
   const token = `${signatureInput}.${signature}`;
@@ -208,7 +210,7 @@ export async function createJWTForUser(
 
   // Create signature
   const signatureInput = `${encodedHeader}.${encodedPayload}`;
-  const signature = await sign(signatureInput, env.JWT_SECRET);
+  const signature = await signJwtData(signatureInput, env.JWT_SECRET);
 
   // Combine into JWT
   const token = `${signatureInput}.${signature}`;

@@ -12,6 +12,9 @@ import {
   verifyJWTWithRevocationCheck,
   revokeToken,
   isTokenRevoked,
+  // OAUTH-REF-002: Import shared JWT utilities to avoid duplication
+  base64UrlEncode,
+  signJwtData,
 } from '../services/jwt-service.js';
 
 export const tokenRouter = new Hono<{ Bindings: Env }>();
@@ -276,39 +279,17 @@ tokenRouter.post('/revoke', async (c) => {
 
 /**
  * Helper to create JWT from existing payload
+ * OAUTH-REF-002: Now uses shared utilities from jwt-service.ts instead of duplicating
  */
 async function createJWTFromPayload(
   payload: JWTPayload,
   env: Env
 ): Promise<{ token: string; expires_at: number }> {
-  // This duplicates some logic from jwt-service but avoids needing DiscordUser
-  const base64UrlEncode = (data: string): string => {
-    const bytes = new TextEncoder().encode(data);
-    const base64 = btoa(String.fromCharCode(...bytes));
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  };
-
-  const sign = async (data: string, secret: string): Promise<string> => {
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(secret);
-    const key = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
-    const sigBytes = new Uint8Array(signature);
-    const base64 = btoa(String.fromCharCode(...sigBytes));
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  };
-
   const header = { alg: 'HS256', typ: 'JWT' };
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signatureInput = `${encodedHeader}.${encodedPayload}`;
-  const signature = await sign(signatureInput, env.JWT_SECRET);
+  const signature = await signJwtData(signatureInput, env.JWT_SECRET);
 
   return {
     token: `${signatureInput}.${signature}`,
