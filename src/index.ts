@@ -116,11 +116,30 @@ app.get('/health', (c) => {
   });
 });
 
-// Mount routers
-app.route('/auth', authorizeRouter);  // Discord OAuth initiation
-app.route('/auth', callbackRouter);   // Discord OAuth callback
-app.route('/auth', xivauthRouter);    // XIVAuth OAuth (initiation + callback)
-app.route('/auth', tokenRouter);      // Token refresh/revoke
+// ============================================
+// AUTH ROUTES
+// All routes are mounted at /auth prefix
+//
+// Route Structure:
+// ┌──────────────────────────────────────────┐
+// │ Discord OAuth                            │
+// │  /auth/discord      - Initiate login     │
+// │  /auth/callback     - Discord callback   │
+// ├──────────────────────────────────────────┤
+// │ XIVAuth OAuth                            │
+// │  /auth/xivauth      - Initiate login     │
+// │  /auth/xivauth/cb   - XIVAuth callback   │
+// ├──────────────────────────────────────────┤
+// │ Token Management                         │
+// │  /auth/refresh      - Refresh JWT token  │
+// │  /auth/revoke       - Revoke session     │
+// └──────────────────────────────────────────┘
+// ============================================
+
+app.route('/auth', authorizeRouter);  // Discord: /auth/discord
+app.route('/auth', callbackRouter);   // Discord: /auth/callback
+app.route('/auth', xivauthRouter);    // XIVAuth: /auth/xivauth, /auth/xivauth/cb
+app.route('/auth', tokenRouter);      // Tokens: /auth/refresh, /auth/revoke
 
 // ============================================
 // ERROR HANDLING

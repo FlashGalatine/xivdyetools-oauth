@@ -25,6 +25,10 @@ export interface CreateUserParams {
  * 2. If not found and Discord ID is available (from XIVAuth social link), try to find by discord_id
  * 3. If found by discord_id, update the existing user with the new xivauth_id (merge accounts)
  * 4. If still not found, create a new user
+ *
+ * Race condition handling:
+ * Uses INSERT with ON CONFLICT to handle concurrent requests for the same user.
+ * If a duplicate key error occurs during insert, retry the lookup.
  */
 export async function findOrCreateUser(
   db: D1Database,
@@ -63,27 +67,60 @@ export async function findOrCreateUser(
     });
   }
 
-  // 3. No existing user - create new one
+  // 3. No existing user - create new one with conflict handling
   const newId = crypto.randomUUID();
 
-  await db
-    .prepare(
-      `INSERT INTO users (id, discord_id, xivauth_id, auth_provider, username, avatar_url)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    )
-    .bind(newId, discord_id || null, xivauth_id || null, auth_provider, username, avatar_url || null)
-    .run();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO users (id, discord_id, xivauth_id, auth_provider, username, avatar_url)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .bind(newId, discord_id || null, xivauth_id || null, auth_provider, username, avatar_url || null)
+      .run();
 
-  return {
-    id: newId,
-    discord_id: discord_id || null,
-    xivauth_id: xivauth_id || null,
-    auth_provider,
-    username,
-    avatar_url: avatar_url || null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
+    return {
+      id: newId,
+      discord_id: discord_id || null,
+      xivauth_id: xivauth_id || null,
+      auth_provider,
+      username,
+      avatar_url: avatar_url || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    // Race condition: another request created the user while we were processing
+    // Retry the lookup and update instead
+    const isConstraintError =
+      error instanceof Error && (error.message.includes('UNIQUE constraint') || error.message.includes('UNIQUE_VIOLATION'));
+
+    if (isConstraintError) {
+      // Re-lookup the user that was just created by another request
+      let raceUser: UserRow | null = null;
+
+      if (xivauth_id) {
+        raceUser = await db.prepare('SELECT * FROM users WHERE xivauth_id = ?').bind(xivauth_id).first<UserRow>();
+      }
+      if (!raceUser && discord_id) {
+        raceUser = await db.prepare('SELECT * FROM users WHERE discord_id = ?').bind(discord_id).first<UserRow>();
+      }
+
+      if (raceUser) {
+        // Update the existing user with our data
+        return await updateUser(db, raceUser.id, {
+          discord_id: raceUser.discord_id || discord_id,
+          xivauth_id: raceUser.xivauth_id || xivauth_id,
+          username,
+          avatar_url,
+          auth_provider,
+        });
+      }
+    }
+
+    // Not a constraint error or couldn't find user - rethrow
+    throw error;
+  }
 }
 
 /**

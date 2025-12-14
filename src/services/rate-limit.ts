@@ -36,6 +36,21 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
 const requestLog = new Map<string, number[]>();
 
 /**
+ * Maximum number of unique keys to track before forced cleanup
+ */
+const MAX_ENTRIES = 10000;
+
+/**
+ * Request counter for deterministic cleanup
+ */
+let requestCount = 0;
+
+/**
+ * Interval for deterministic cleanup (every N requests)
+ */
+const CLEANUP_INTERVAL = 100;
+
+/**
  * Rate limit check result
  */
 export interface RateLimitResult {
@@ -102,9 +117,19 @@ export function checkRateLimit(ip: string, path: string): RateLimitResult {
     requestLog.set(key, recentTimestamps);
   }
 
-  // Periodically clean up old entries
-  if (Math.random() < 0.01) {
+  // Deterministic cleanup: every CLEANUP_INTERVAL requests
+  requestCount++;
+  if (requestCount % CLEANUP_INTERVAL === 0) {
     cleanupOldEntries();
+  }
+
+  // Emergency cleanup if map grows too large
+  if (requestLog.size > MAX_ENTRIES) {
+    cleanupOldEntries();
+    // If still too large after cleanup, remove oldest entries
+    if (requestLog.size > MAX_ENTRIES) {
+      pruneOldestEntries();
+    }
   }
 
   return { allowed, remaining, resetAt, limit: config.maxRequests };
@@ -128,8 +153,36 @@ function cleanupOldEntries(): void {
 }
 
 /**
+ * Prune oldest entries when map exceeds MAX_ENTRIES
+ * Removes entries with the oldest last-activity timestamp
+ */
+function pruneOldestEntries(): void {
+  // Calculate how many to remove (remove 20% of entries)
+  const targetSize = Math.floor(MAX_ENTRIES * 0.8);
+  const toRemove = requestLog.size - targetSize;
+
+  if (toRemove <= 0) return;
+
+  // Find entries with oldest last-activity
+  const entries: Array<{ key: string; lastActivity: number }> = [];
+  requestLog.forEach((timestamps, key) => {
+    const lastActivity = timestamps.length > 0 ? Math.max(...timestamps) : 0;
+    entries.push({ key, lastActivity });
+  });
+
+  // Sort by last activity (oldest first)
+  entries.sort((a, b) => a.lastActivity - b.lastActivity);
+
+  // Remove oldest entries
+  for (let i = 0; i < toRemove; i++) {
+    requestLog.delete(entries[i].key);
+  }
+}
+
+/**
  * Reset the rate limiter (for testing purposes)
  */
 export function resetRateLimiter(): void {
   requestLog.clear();
+  requestCount = 0;
 }
