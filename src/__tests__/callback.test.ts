@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SELF, fetchWithEnv, createProductionEnv } from './mocks/cloudflare-test.js';
+import { SELF, fetchWithEnv, createProductionEnv, VALID_CODE_VERIFIER } from './mocks/cloudflare-test.js';
 import { resetRateLimiter } from '../services/rate-limit.js';
 
 // Store original fetch
@@ -206,7 +206,7 @@ describe('Callback Handler', () => {
             const response = await SELF.fetch('http://localhost/auth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code_verifier: 'verifier123' }),
+                body: JSON.stringify({ code_verifier: VALID_CODE_VERIFIER }),
             });
 
             const json = await response.json();
@@ -243,7 +243,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'invalid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -276,7 +276,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -315,7 +315,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -367,7 +367,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'code',
-                    code_verifier: 'verifier',
+                    code_verifier: VALID_CODE_VERIFIER,
                     redirect_uri: 'http://localhost:5173/custom/callback',
                 }),
             });
@@ -403,7 +403,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'code',
-                    code_verifier: 'verifier',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -424,7 +424,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'code',
-                    code_verifier: 'verifier',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -455,7 +455,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'invalid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -482,7 +482,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'code',
-                    code_verifier: 'verifier',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -516,7 +516,7 @@ describe('Callback Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'invalid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 

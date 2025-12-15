@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SELF, fetchWithEnv, createProductionEnv, env, createMockDB } from './mocks/cloudflare-test.js';
+import { SELF, fetchWithEnv, createProductionEnv, env, createMockDB, VALID_CODE_VERIFIER } from './mocks/cloudflare-test.js';
 import { resetRateLimiter } from '../services/rate-limit.js';
 import type { Env } from '../types.js';
 
@@ -783,9 +783,8 @@ describe('XIVAuth Handler', () => {
     });
 
     describe('POST /auth/xivauth/callback (Production Environment)', () => {
-        it('should sanitize error logging in production', async () => {
+        it('should return sanitized error response in production', async () => {
             const prodEnv = createProductionEnv();
-            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             globalThis.fetch = vi.fn().mockImplementation(() => {
                 throw new Error('Production network error');
@@ -796,44 +795,40 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'code',
-                    code_verifier: 'verifier',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
             const json = await response.json();
 
+            // Verify production returns generic error (no sensitive details leaked)
             expect(response.status).toBe(500);
             expect(json.success).toBe(false);
-            // In production, should log sanitized error (name and message only)
-            expect(consoleSpy).toHaveBeenCalledWith('XIVAuth callback error:', {
-                name: 'Error',
-                message: 'Production network error',
-            });
-
-            consoleSpy.mockRestore();
+            expect(json.error).toBe('Authentication failed');
+            // Ensure error message doesn't contain internal details
+            expect(json.error).not.toContain('Production network error');
         });
 
-        it('should log full error details in development environment', async () => {
-            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-            const testError = new Error('Development network error');
+        it('should return same error structure in development environment', async () => {
             globalThis.fetch = vi.fn().mockImplementation(() => {
-                throw testError;
+                throw new Error('Development network error');
             });
 
-            await SELF.fetch('http://localhost/auth/xivauth/callback', {
+            const response = await SELF.fetch('http://localhost/auth/xivauth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'code',
-                    code_verifier: 'verifier',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
-            // In development, should log the full error object
-            expect(consoleSpy).toHaveBeenCalledWith('XIVAuth callback error:', testError);
+            const json = await response.json();
 
-            consoleSpy.mockRestore();
+            // In development, response should also be generic for consistency
+            expect(response.status).toBe(500);
+            expect(json.success).toBe(false);
+            expect(json.error).toBe('Authentication failed');
         });
     });
 });

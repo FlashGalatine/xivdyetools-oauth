@@ -6,6 +6,18 @@
 import app from '../../index.js';
 import type { Env, UserRow } from '../../types.js';
 
+/**
+ * Valid PKCE test values per RFC 7636
+ * code_verifier: 43-128 chars using unreserved URI characters [A-Za-z0-9-._~]
+ * code_challenge: BASE64URL(SHA256(verifier)) = 43 chars for S256
+ *
+ * These are valid test values (format-valid, though not cryptographically linked)
+ */
+export const VALID_CODE_VERIFIER =
+  'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk~test123456789012345';
+export const VALID_CODE_CHALLENGE =
+  'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM_test12345678';
+
 // In-memory user store for D1 mock
 const userStore = new Map<string, UserRow>();
 

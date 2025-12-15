@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SELF, fetchWithEnv, createProductionEnv, env } from './mocks/cloudflare-test.js';
+import { SELF, fetchWithEnv, createProductionEnv, env, VALID_CODE_CHALLENGE } from './mocks/cloudflare-test.js';
 import { resetRateLimiter, checkRateLimit } from '../services/rate-limit.js';
 
 describe('OAuth Worker App', () => {
@@ -115,7 +115,7 @@ describe('OAuth Worker App', () => {
 
     describe('Rate Limiting Middleware', () => {
         it('should add rate limit headers to auth responses', async () => {
-            const response = await SELF.fetch('http://localhost/auth/discord?code_challenge=test');
+            const response = await SELF.fetch(`http://localhost/auth/discord?code_challenge=${VALID_CODE_CHALLENGE}`);
 
             expect(response.headers.get('X-RateLimit-Limit')).toBeTruthy();
             expect(response.headers.get('X-RateLimit-Remaining')).toBeTruthy();
@@ -131,7 +131,7 @@ describe('OAuth Worker App', () => {
             // Make a request that should be rate limited
             const response = await fetchWithEnv(
                 env,
-                'http://localhost/auth/discord?code_challenge=test',
+                `http://localhost/auth/discord?code_challenge=${VALID_CODE_CHALLENGE}`,
                 {
                     headers: {
                         'CF-Connecting-IP': 'test-ip-rate-limit',
@@ -157,7 +157,7 @@ describe('OAuth Worker App', () => {
             // Different IP should still work
             const response = await fetchWithEnv(
                 env,
-                'http://localhost/auth/discord?code_challenge=test',
+                `http://localhost/auth/discord?code_challenge=${VALID_CODE_CHALLENGE}`,
                 {
                     headers: {
                         'CF-Connecting-IP': 'allowed-ip',

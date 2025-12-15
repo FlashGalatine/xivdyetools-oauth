@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SELF } from './mocks/cloudflare-test.js';
+import { SELF, VALID_CODE_CHALLENGE } from './mocks/cloudflare-test.js';
 import { resetRateLimiter } from '../services/rate-limit.js';
 
 describe('Authorize Handler', () => {
@@ -27,7 +27,7 @@ describe('Authorize Handler', () => {
             // SECURITY: code_verifier should NEVER be sent to the server
             // It stays in sessionStorage on the client and is sent via POST /auth/callback
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
             });
 
             const response = await SELF.fetch(`http://localhost/auth/discord?${params}`, {
@@ -40,7 +40,7 @@ describe('Authorize Handler', () => {
 
         it('should reject invalid code_challenge_method', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
                 code_challenge_method: 'plain',
             });
 
@@ -54,7 +54,7 @@ describe('Authorize Handler', () => {
 
         it('should accept S256 code_challenge_method', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -67,7 +67,7 @@ describe('Authorize Handler', () => {
 
         it('should reject disallowed redirect_uri', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
                 redirect_uri: 'http://evil.com/callback',
             });
 
@@ -80,7 +80,7 @@ describe('Authorize Handler', () => {
 
         it('should allow localhost redirect_uri', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
                 redirect_uri: 'http://localhost:5173/auth/callback',
             });
 
@@ -93,7 +93,7 @@ describe('Authorize Handler', () => {
 
         it('should redirect to Discord OAuth URL', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
             });
 
             const response = await SELF.fetch(`http://localhost/auth/discord?${params}`, {
@@ -105,12 +105,12 @@ describe('Authorize Handler', () => {
             const location = response.headers.get('location');
             expect(location).toContain('https://discord.com/oauth2/authorize');
             expect(location).toContain('client_id=');
-            expect(location).toContain('code_challenge=challenge123');
+            expect(location).toContain(`code_challenge=${VALID_CODE_CHALLENGE}`);
         });
 
         it('should include scope=identify in Discord URL', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
             });
 
             const response = await SELF.fetch(`http://localhost/auth/discord?${params}`, {
@@ -123,7 +123,7 @@ describe('Authorize Handler', () => {
 
         it('should encode state WITHOUT code_verifier (security)', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
                 return_path: '/settings',
             });
 
@@ -137,7 +137,7 @@ describe('Authorize Handler', () => {
 
             // Decode base64 state
             const decodedState = JSON.parse(atob(state!));
-            expect(decodedState.code_challenge).toBe('challenge123');
+            expect(decodedState.code_challenge).toBe(VALID_CODE_CHALLENGE);
             // SECURITY: code_verifier should NOT be in state
             expect(decodedState.code_verifier).toBeUndefined();
             expect(decodedState.return_path).toBe('/settings');
@@ -145,7 +145,7 @@ describe('Authorize Handler', () => {
 
         it('should use default return_path when not provided', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
             });
 
             const response = await SELF.fetch(`http://localhost/auth/discord?${params}`, {
@@ -161,7 +161,7 @@ describe('Authorize Handler', () => {
 
         it('should include code_challenge_method in Discord URL', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
             });
 
             const response = await SELF.fetch(`http://localhost/auth/discord?${params}`, {
@@ -174,7 +174,7 @@ describe('Authorize Handler', () => {
 
         it('should allow xivdyetools.projectgalatine.com redirect', async () => {
             const params = new URLSearchParams({
-                code_challenge: 'challenge123',
+                code_challenge: VALID_CODE_CHALLENGE,
                 redirect_uri: 'https://xivdyetools.projectgalatine.com/auth/callback',
             });
 
