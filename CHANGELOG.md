@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.2-beta] - 2025-12-14
+## [2.1.0] - 2025-12-14
+
+### Added
+
+- **Structured Logging**: Added structured request logger middleware using `@xivdyetools/logger/worker`
+- **Shared Package Integration**: Migrated to `@xivdyetools/types` and `@xivdyetools/logger` for ecosystem consistency
+- **Test Utils Integration**: Migrated tests to use `@xivdyetools/test-utils` shared package
+
+### Changed
+
+- **JWT Utilities**: Extracted shared JWT utilities for better code organization (OAUTH-REF-002)
+
+### Fixed
+
+- **Security**: Added PKCE parameter format validation per RFC 7636
+- **Security**: Added state expiration and scope validation
+- **Security**: Added cross-cutting security improvements
+- **CORS**: Restricted localhost CORS to specific ports (OAUTH-SEC-001)
+- **Medium Severity**: Addressed MEDIUM severity audit findings
+- **Tests**: Updated tests to use valid PKCE values per RFC 7636
 
 ### Deprecated
 
