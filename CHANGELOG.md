@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2-beta] - 2025-12-14
+
+### Deprecated
+
+#### Type Re-exports
+The following re-exports from `src/types.ts` are deprecated and will be removed in the next major version:
+
+- **Auth Provider Types**: Import from `@xivdyetools/types` instead
+- **JWT Types** (JWTPayload, OAuthState, etc.): Import from `@xivdyetools/types` instead
+- **Discord Types** (DiscordTokenResponse, DiscordUser): Import from `@xivdyetools/types` instead
+- **XIVAuth Types**: Import from `@xivdyetools/types` instead
+- **Response Types** (AuthResponse, RefreshResponse, etc.): Import from `@xivdyetools/types` instead
+
+**Note:** Project-specific types (Env, UserRow) remain unchanged.
+
+**Migration Guide:**
+```typescript
+// Before (deprecated)
+import { AuthProvider, JWTPayload, AuthResponse } from './types';
+
+// After (recommended)
+import type { AuthProvider, JWTPayload, AuthResponse } from '@xivdyetools/types';
+```
+
+---
+
 ## [2.0.1-beta] - 2025-12-13
 
 ### Fixed

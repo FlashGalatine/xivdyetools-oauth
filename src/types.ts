@@ -9,16 +9,28 @@
 // RE-EXPORT SHARED TYPES
 // ============================================
 
-// Auth provider types
+/**
+ * @deprecated Import directly from '@xivdyetools/types' instead.
+ * These re-exports will be removed in the next major version.
+ */
 export type { AuthProvider } from '@xivdyetools/types';
 
-// JWT types
+/**
+ * @deprecated Import directly from '@xivdyetools/types' instead.
+ * These re-exports will be removed in the next major version.
+ */
 export type { PrimaryCharacter, JWTPayload, OAuthState } from '@xivdyetools/types';
 
-// Discord types
+/**
+ * @deprecated Import directly from '@xivdyetools/types' instead.
+ * These re-exports will be removed in the next major version.
+ */
 export type { DiscordTokenResponse, DiscordUser } from '@xivdyetools/types';
 
-// XIVAuth types
+/**
+ * @deprecated Import directly from '@xivdyetools/types' instead.
+ * These re-exports will be removed in the next major version.
+ */
 export type {
   XIVAuthTokenResponse,
   XIVAuthCharacter,
@@ -27,7 +39,10 @@ export type {
   XIVAuthUser,
 } from '@xivdyetools/types';
 
-// Response types
+/**
+ * @deprecated Import directly from '@xivdyetools/types' instead.
+ * These re-exports will be removed in the next major version.
+ */
 export type { AuthResponse, RefreshResponse, UserInfoResponse } from '@xivdyetools/types';
 
 // ============================================
