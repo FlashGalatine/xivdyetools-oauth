@@ -5,7 +5,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
+import type { ExtendedLogger } from '@xivdyetools/logger';
 import type { Env } from './types.js';
 import { authorizeRouter } from './handlers/authorize.js';
 import { callbackRouter } from './handlers/callback.js';
@@ -14,9 +14,12 @@ import { xivauthRouter } from './handlers/xivauth.js';
 import { checkRateLimit, getClientIp } from './services/rate-limit.js';
 import { validateEnv, logValidationErrors } from './utils/env-validation.js';
 import { requestIdMiddleware, getRequestId, type RequestIdVariables } from './middleware/request-id.js';
+import { loggerMiddleware, getLogger } from './middleware/logger.js';
 
 // Define context variables type
-type Variables = RequestIdVariables;
+type Variables = RequestIdVariables & {
+  logger: ExtendedLogger;
+};
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -27,11 +30,11 @@ let envValidated = false;
 // MIDDLEWARE
 // ============================================
 
-// Request logging
-app.use('*', logger());
-
 // Request ID middleware (must be early for tracing)
 app.use('*', requestIdMiddleware);
+
+// Structured request logger (after request ID for correlation)
+app.use('*', loggerMiddleware);
 
 // Environment validation middleware
 // Validates required env vars once per isolate and caches result
@@ -46,7 +49,10 @@ app.use('*', async (c, next) => {
         return c.json({ error: 'Service misconfigured' }, 500);
       }
       // In development, log warnings but continue
-      console.warn('Continuing with invalid env configuration (development mode)');
+      const logger = getLogger(c);
+      if (logger) {
+        logger.warn('Continuing with invalid env configuration (development mode)');
+      }
     }
   }
   await next();
@@ -203,15 +209,22 @@ app.notFound((c) => {
 // Global error handler
 app.onError((err, c) => {
   const requestId = getRequestId(c);
-  // Sanitize logs in production - only log error name and message, not full stack
+  const logger = getLogger(c);
   const isDev = c.env.ENVIRONMENT === 'development';
-  const logMessage = isDev ? err : { name: err.name, message: err.message };
-  console.error(`[${requestId}] Unhandled error:`, logMessage);
+
+  // Use structured logger if available
+  if (logger) {
+    logger.error('Unhandled error', err, { operation: 'globalErrorHandler' });
+  } else {
+    // Fallback to console if logger not available
+    const logMessage = isDev ? err : { name: err.name, message: err.message };
+    console.error(`[${requestId}] Unhandled error:`, logMessage);
+  }
 
   return c.json(
     {
       error: 'Internal Server Error',
-      message: c.env.ENVIRONMENT === 'development' ? err.message : 'An error occurred',
+      message: isDev ? err.message : 'An error occurred',
       requestId,
     },
     500
