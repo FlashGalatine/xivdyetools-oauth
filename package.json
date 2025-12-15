@@ -22,6 +22,7 @@
     "@cloudflare/workers-types": "^4.20241127.0",
     "@types/node": "^22.10.1",
     "@vitest/coverage-v8": "^2.1.9",
+    "@xivdyetools/test-utils": "^1.0.2",
     "miniflare": "^4.20251202.1",
     "typescript": "^5.7.2",
     "vitest": "^2.1.9",

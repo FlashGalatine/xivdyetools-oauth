@@ -1,22 +1,26 @@
 /**
  * Mock for cloudflare:test module
  * Provides SELF and env for testing the worker
+ *
+ * Some utilities are now imported from @xivdyetools/test-utils.
+ * This file contains project-specific utilities that require local types.
  */
 
 import app from '../../index.js';
 import type { Env, UserRow } from '../../types.js';
 
-/**
- * Valid PKCE test values per RFC 7636
- * code_verifier: 43-128 chars using unreserved URI characters [A-Za-z0-9-._~]
- * code_challenge: BASE64URL(SHA256(verifier)) = 43 chars for S256
- *
- * These are valid test values (format-valid, though not cryptographically linked)
- */
-export const VALID_CODE_VERIFIER =
-  'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk~test123456789012345';
-export const VALID_CODE_CHALLENGE =
-  'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM_test12345678';
+// Import shared utilities from main export
+import {
+    VALID_CODE_VERIFIER,
+    VALID_CODE_CHALLENGE,
+    createMockKV as sharedCreateMockKV,
+} from '@xivdyetools/test-utils';
+
+// Re-export for consumers of this module
+export { VALID_CODE_VERIFIER, VALID_CODE_CHALLENGE };
+
+// Re-export KV mock
+export const createMockKV = sharedCreateMockKV;
 
 // In-memory user store for D1 mock
 const userStore = new Map<string, UserRow>();
@@ -116,23 +120,6 @@ export const createMockDB = (): D1Database & { _users: Map<string, UserRow> } =>
 
 // Shared mock DB instance
 const mockDB = createMockDB();
-
-// Mock KV namespace for token revocation tests
-export const createMockKV = (): KVNamespace & { _store: Map<string, string> } => {
-    const store = new Map<string, string>();
-    return {
-        _store: store,
-        get: async (key: string) => store.get(key) ?? null,
-        put: async (key: string, value: string, _options?: { expirationTtl?: number }) => {
-            store.set(key, value);
-        },
-        delete: async (key: string) => {
-            store.delete(key);
-        },
-        list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
-        getWithMetadata: async (key: string) => ({ value: store.get(key) ?? null, metadata: null, cacheStatus: null }),
-    } as unknown as KVNamespace & { _store: Map<string, string> };
-};
 
 // Mock environment bindings
 export const env: Env = {
