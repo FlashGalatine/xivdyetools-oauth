@@ -140,6 +140,13 @@ export const createProductionEnv = (): Env => ({
     ENVIRONMENT: 'production',
 });
 
+// Create broken production environment for testing env validation failure
+export const createBrokenProductionEnv = (): Partial<Env> => ({
+    ENVIRONMENT: 'production',
+    // Missing required fields to trigger validation failure
+    DB: mockDB,
+});
+
 // Create environment with KV namespace for revocation tests
 export const createEnvWithKV = (): Env & { TOKEN_BLACKLIST: KVNamespace } => ({
     ...env,

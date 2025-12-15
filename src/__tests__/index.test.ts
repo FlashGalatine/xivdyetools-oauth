@@ -89,6 +89,49 @@ describe('OAuth Worker App', () => {
             expect(response.status).toBe(204);
             expect(response.headers.get('access-control-allow-methods')).toContain('POST');
         });
+
+        it('should reject localhost without whitelisted port', async () => {
+            const response = await SELF.fetch('http://localhost/', {
+                headers: { Origin: 'http://localhost:9999' }, // Not in whitelist
+            });
+
+            // Should not include CORS headers for non-whitelisted port
+            expect(response.headers.get('access-control-allow-origin')).not.toBe('http://localhost:9999');
+        });
+
+        it('should reject 127.0.0.1 without whitelisted port', async () => {
+            const response = await SELF.fetch('http://localhost/', {
+                headers: { Origin: 'http://127.0.0.1:9999' },
+            });
+
+            expect(response.headers.get('access-control-allow-origin')).not.toBe('http://127.0.0.1:9999');
+        });
+
+        it('should allow 127.0.0.1 with whitelisted port', async () => {
+            const response = await SELF.fetch('http://localhost/', {
+                headers: { Origin: 'http://127.0.0.1:5173' },
+            });
+
+            expect(response.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:5173');
+        });
+
+        it('should reject invalid URL in origin header', async () => {
+            const response = await SELF.fetch('http://localhost/', {
+                headers: { Origin: 'not-a-valid-url' },
+            });
+
+            // Should not allow invalid URLs
+            expect(response.headers.get('access-control-allow-origin')).not.toBe('not-a-valid-url');
+        });
+
+        it('should reject localhost without port', async () => {
+            const response = await SELF.fetch('http://localhost/', {
+                headers: { Origin: 'http://localhost' }, // No port specified
+            });
+
+            // No port means empty string from url.port, not in whitelist
+            expect(response.headers.get('access-control-allow-origin')).not.toBe('http://localhost');
+        });
     });
 
     describe('404 Handler', () => {

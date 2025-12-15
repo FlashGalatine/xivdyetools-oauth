@@ -23,6 +23,44 @@ describe('Authorize Handler', () => {
             expect(json.error).toBe('Missing code_challenge');
         });
 
+        it('should reject invalid code_challenge format (too short)', async () => {
+            const params = new URLSearchParams({
+                code_challenge: 'short', // Invalid - less than 43 chars
+            });
+
+            const response = await SELF.fetch(`http://localhost/auth/discord?${params}`);
+            const json = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(json.error).toBe('Invalid code_challenge format');
+            expect(json.message).toContain('base64url');
+        });
+
+        it('should reject invalid code_challenge format (invalid characters)', async () => {
+            const params = new URLSearchParams({
+                // Invalid chars: !, @, #, $ are not allowed in base64url
+                code_challenge: '!@#$%^&*()_+=[]{}|;:,.<>?/`~' + 'a'.repeat(20),
+            });
+
+            const response = await SELF.fetch(`http://localhost/auth/discord?${params}`);
+            const json = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(json.error).toBe('Invalid code_challenge format');
+        });
+
+        it('should reject code_challenge with spaces', async () => {
+            const params = new URLSearchParams({
+                code_challenge: 'valid_challenge_start with spaces here too long enough',
+            });
+
+            const response = await SELF.fetch(`http://localhost/auth/discord?${params}`);
+            const json = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(json.error).toBe('Invalid code_challenge format');
+        });
+
         it('should not require code_verifier parameter (stays on client for security)', async () => {
             // SECURITY: code_verifier should NEVER be sent to the server
             // It stays in sessionStorage on the client and is sent via POST /auth/callback

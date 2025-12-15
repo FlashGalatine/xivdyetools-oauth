@@ -185,6 +185,33 @@ describe('Callback Handler', () => {
             const location = new URL(response.headers.get('location')!);
             expect(location.searchParams.has('return_path')).toBe(false);
         });
+
+        it('should reject expired state token', async () => {
+            // Create state with expired timestamp
+            const now = Math.floor(Date.now() / 1000);
+            const state = btoa(JSON.stringify({
+                csrf: 'test',
+                code_challenge: 'challenge',
+                redirect_uri: 'http://localhost:5173/auth/callback',
+                return_path: '/',
+                iat: now - 7200, // 2 hours ago
+                exp: now - 3600, // Expired 1 hour ago
+            }));
+
+            const params = new URLSearchParams({
+                code: 'auth_code_123',
+                state,
+            });
+
+            const response = await SELF.fetch(`http://localhost/auth/callback?${params}`, {
+                redirect: 'manual',
+            });
+
+            expect(response.status).toBe(302);
+
+            const location = new URL(response.headers.get('location')!);
+            expect(location.searchParams.get('error')).toContain('expired');
+        });
     });
 
     describe('POST /auth/callback', () => {
@@ -228,6 +255,41 @@ describe('Callback Handler', () => {
             expect(response.status).toBe(400);
             expect(json.success).toBe(false);
             expect(json.error).toContain('code_verifier');
+        });
+
+        it('should reject invalid code_verifier format (too short)', async () => {
+            const response = await SELF.fetch('http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'auth_code',
+                    code_verifier: 'short', // Less than 43 characters
+                }),
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(json.success).toBe(false);
+            expect(json.error).toBe('Invalid code_verifier format');
+        });
+
+        it('should reject invalid code_verifier format (invalid characters)', async () => {
+            const response = await SELF.fetch('http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'auth_code',
+                    // Contains invalid chars like @, #, !, spaces
+                    code_verifier: 'invalid@chars#here! with spaces too' + 'x'.repeat(15),
+                }),
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(400);
+            expect(json.success).toBe(false);
+            expect(json.error).toBe('Invalid code_verifier format');
         });
 
         it('should handle Discord token exchange failure', async () => {
@@ -285,6 +347,144 @@ describe('Callback Handler', () => {
             expect(response.status).toBe(401);
             expect(json.success).toBe(false);
             expect(json.error).toContain('user information');
+        });
+
+        it('should reject token missing required identify scope', async () => {
+            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('oauth2/token')) {
+                    return Promise.resolve(new Response(JSON.stringify({
+                        access_token: 'token',
+                        token_type: 'Bearer',
+                        expires_in: 604800,
+                        refresh_token: 'refresh',
+                        scope: 'email', // Wrong scope - no 'identify'
+                    }), { status: 200 }));
+                }
+                return originalFetch(url);
+            });
+
+            const response = await SELF.fetch('http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'valid_code',
+                    code_verifier: VALID_CODE_VERIFIER,
+                }),
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('missing required permissions');
+        });
+
+        it('should reject token with no scope', async () => {
+            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('oauth2/token')) {
+                    return Promise.resolve(new Response(JSON.stringify({
+                        access_token: 'token',
+                        token_type: 'Bearer',
+                        expires_in: 604800,
+                        refresh_token: 'refresh',
+                        // No scope field at all
+                    }), { status: 200 }));
+                }
+                return originalFetch(url);
+            });
+
+            const response = await SELF.fetch('http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'valid_code',
+                    code_verifier: VALID_CODE_VERIFIER,
+                }),
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('missing required permissions');
+        });
+
+        it('should reject Discord user response missing required id field', async () => {
+            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('oauth2/token')) {
+                    return Promise.resolve(new Response(JSON.stringify({
+                        access_token: 'token',
+                        token_type: 'Bearer',
+                        expires_in: 604800,
+                        refresh_token: 'refresh',
+                        scope: 'identify',
+                    }), { status: 200 }));
+                }
+                if (url.includes('users/@me')) {
+                    return Promise.resolve(new Response(JSON.stringify({
+                        // Missing 'id' field
+                        username: 'testuser',
+                        discriminator: '0001',
+                        global_name: 'Test User',
+                        avatar: 'abc123',
+                    }), { status: 200 }));
+                }
+                return originalFetch(url);
+            });
+
+            const response = await SELF.fetch('http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'valid_code',
+                    code_verifier: VALID_CODE_VERIFIER,
+                }),
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('Invalid user data');
+        });
+
+        it('should reject Discord user response missing required username field', async () => {
+            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('oauth2/token')) {
+                    return Promise.resolve(new Response(JSON.stringify({
+                        access_token: 'token',
+                        token_type: 'Bearer',
+                        expires_in: 604800,
+                        refresh_token: 'refresh',
+                        scope: 'identify',
+                    }), { status: 200 }));
+                }
+                if (url.includes('users/@me')) {
+                    return Promise.resolve(new Response(JSON.stringify({
+                        id: '123456789',
+                        // Missing 'username' field
+                        discriminator: '0001',
+                        global_name: 'Test User',
+                        avatar: 'abc123',
+                    }), { status: 200 }));
+                }
+                return originalFetch(url);
+            });
+
+            const response = await SELF.fetch('http://localhost/auth/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: 'valid_code',
+                    code_verifier: VALID_CODE_VERIFIER,
+                }),
+            });
+
+            const json = await response.json();
+
+            expect(response.status).toBe(401);
+            expect(json.success).toBe(false);
+            expect(json.error).toContain('Invalid user data');
         });
 
         it('should return token and user info on success', async () => {

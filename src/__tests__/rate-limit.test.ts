@@ -274,4 +274,69 @@ describe('Rate Limiter Service', () => {
             expect(result.remaining).toBe(10);
         });
     });
+
+    describe('deterministic cleanup', () => {
+        it('should trigger cleanup every 100 requests', () => {
+            // Reset to get a known state
+            resetRateLimiter();
+
+            // Create an entry
+            checkRateLimit('cleanup-periodic-ip', '/auth/discord');
+
+            // Advance time past cleanup threshold (2 minutes)
+            vi.advanceTimersByTime(130 * 1000);
+
+            // Make 99 more requests (total 100) to trigger deterministic cleanup
+            for (let i = 0; i < 99; i++) {
+                checkRateLimit(`ip-${i}`, '/auth/discord');
+            }
+
+            // The old entry should have been cleaned up by the 100th request
+            // Make a new request to the original IP - should have full limit
+            const result = checkRateLimit('cleanup-periodic-ip', '/auth/discord');
+            expect(result.remaining).toBe(10);
+        });
+
+        it('should keep recent entries during cleanup', () => {
+            resetRateLimiter();
+
+            // Make 50 requests to trigger a couple cleanups
+            for (let i = 0; i < 50; i++) {
+                checkRateLimit('persistent-ip', '/auth/discord');
+            }
+
+            // Advance time but not past cleanup threshold (stay within 2 minutes)
+            vi.advanceTimersByTime(60 * 1000);
+
+            // Make 50 more requests to trigger cleanup at 100
+            for (let i = 0; i < 50; i++) {
+                checkRateLimit(`other-ip-${i}`, '/auth/discord');
+            }
+
+            // The entry with recent activity should still exist
+            // At T=60s, the rate limit window (60s) excludes all 50 original requests
+            // So we should have full limit again
+            const result = checkRateLimit('persistent-ip', '/auth/discord');
+            expect(result.remaining).toBe(10);
+        });
+    });
+
+    describe('entries with empty timestamps', () => {
+        it('should handle entries where all timestamps are filtered out', () => {
+            // Create entry
+            checkRateLimit('empty-ts-ip', '/auth/discord');
+
+            // Advance time way past both rate limit window (60s) and cleanup threshold (120s)
+            vi.advanceTimersByTime(200 * 1000);
+
+            // Make 100 requests to trigger cleanup
+            for (let i = 0; i < 100; i++) {
+                checkRateLimit(`trigger-ip-${i}`, '/auth/discord');
+            }
+
+            // The original entry should be completely gone
+            const result = checkRateLimit('empty-ts-ip', '/auth/discord');
+            expect(result.remaining).toBe(10);
+        });
+    });
 });

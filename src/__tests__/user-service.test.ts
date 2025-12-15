@@ -479,3 +479,202 @@ describe('User Service - Error Handling', () => {
         ).rejects.toThrow('User existing-user-id not found after update');
     });
 });
+
+/**
+ * Test race condition handling in findOrCreateUser
+ * Tests lines 95-123 of user-service.ts
+ */
+describe('User Service - Race Condition Handling', () => {
+    it('should handle UNIQUE constraint violation and retry lookup by xivauth_id', async () => {
+        let insertCallCount = 0;
+        let selectByXivauthCallCount = 0;
+
+        const raceDB = {
+            prepare: (sql: string) => ({
+                bind: (...params: unknown[]) => ({
+                    first: async () => {
+                        // First lookup by xivauth_id returns null (simulating no existing user)
+                        if (sql.includes('xivauth_id = ?')) {
+                            selectByXivauthCallCount++;
+                            // First call returns null, second call (after retry) returns user
+                            if (selectByXivauthCallCount === 1) {
+                                return null;
+                            }
+                            return {
+                                id: 'race-created-user',
+                                discord_id: null,
+                                xivauth_id: 'race-xivauth-id',
+                                auth_provider: 'xivauth',
+                                username: 'race-user',
+                                avatar_url: null,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                            };
+                        }
+                        // For SELECT by id (after update)
+                        if (sql.includes('WHERE id = ?')) {
+                            return {
+                                id: params[params.length - 1] as string,
+                                discord_id: null,
+                                xivauth_id: 'race-xivauth-id',
+                                auth_provider: 'xivauth',
+                                username: 'updated-name',
+                                avatar_url: null,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                            };
+                        }
+                        return null;
+                    },
+                    run: async () => {
+                        if (sql.includes('INSERT INTO users')) {
+                            insertCallCount++;
+                            // First insert fails with UNIQUE constraint
+                            throw new Error('UNIQUE constraint failed: users.xivauth_id');
+                        }
+                        return { success: true, meta: {} };
+                    },
+                    all: async () => ({ results: [], success: true, meta: {} as D1Meta }),
+                }),
+            }),
+            exec: async () => ({ count: 0, duration: 0 }),
+            batch: async () => [],
+            dump: async () => new ArrayBuffer(0),
+        } as unknown as D1Database;
+
+        const user = await findOrCreateUser(raceDB, {
+            xivauth_id: 'race-xivauth-id',
+            username: 'new-user',
+            auth_provider: 'xivauth',
+        });
+
+        // Should have retried the lookup and found the user
+        expect(user.xivauth_id).toBe('race-xivauth-id');
+        expect(insertCallCount).toBe(1);
+        expect(selectByXivauthCallCount).toBe(2);
+    });
+
+    it('should handle UNIQUE constraint violation and retry lookup by discord_id', async () => {
+        let insertCallCount = 0;
+        let selectByDiscordCallCount = 0;
+
+        const raceDB = {
+            prepare: (sql: string) => ({
+                bind: (...params: unknown[]) => ({
+                    first: async () => {
+                        // First lookup by discord_id returns null
+                        if (sql.includes('discord_id = ?')) {
+                            selectByDiscordCallCount++;
+                            if (selectByDiscordCallCount === 1) {
+                                return null;
+                            }
+                            // Second call (retry) finds the user
+                            return {
+                                id: 'race-discord-user',
+                                discord_id: 'race-discord-id',
+                                xivauth_id: null,
+                                auth_provider: 'discord',
+                                username: 'race-user',
+                                avatar_url: null,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                            };
+                        }
+                        // For SELECT by id (after update)
+                        if (sql.includes('WHERE id = ?')) {
+                            return {
+                                id: params[params.length - 1] as string,
+                                discord_id: 'race-discord-id',
+                                xivauth_id: null,
+                                auth_provider: 'discord',
+                                username: 'updated-name',
+                                avatar_url: null,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                            };
+                        }
+                        return null;
+                    },
+                    run: async () => {
+                        if (sql.includes('INSERT INTO users')) {
+                            insertCallCount++;
+                            throw new Error('UNIQUE_VIOLATION: duplicate key value');
+                        }
+                        return { success: true, meta: {} };
+                    },
+                    all: async () => ({ results: [], success: true, meta: {} as D1Meta }),
+                }),
+            }),
+            exec: async () => ({ count: 0, duration: 0 }),
+            batch: async () => [],
+            dump: async () => new ArrayBuffer(0),
+        } as unknown as D1Database;
+
+        const user = await findOrCreateUser(raceDB, {
+            discord_id: 'race-discord-id',
+            username: 'new-user',
+            auth_provider: 'discord',
+        });
+
+        // Should have retried and found the user
+        expect(user.discord_id).toBe('race-discord-id');
+        expect(insertCallCount).toBe(1);
+        expect(selectByDiscordCallCount).toBe(2);
+    });
+
+    it('should rethrow non-constraint errors', async () => {
+        const errorDB = {
+            prepare: (sql: string) => ({
+                bind: () => ({
+                    first: async () => null,
+                    run: async () => {
+                        if (sql.includes('INSERT INTO users')) {
+                            throw new Error('Database connection lost');
+                        }
+                        return { success: true, meta: {} };
+                    },
+                    all: async () => ({ results: [], success: true, meta: {} as D1Meta }),
+                }),
+            }),
+            exec: async () => ({ count: 0, duration: 0 }),
+            batch: async () => [],
+            dump: async () => new ArrayBuffer(0),
+        } as unknown as D1Database;
+
+        await expect(
+            findOrCreateUser(errorDB, {
+                discord_id: 'test-discord',
+                username: 'test',
+                auth_provider: 'discord',
+            })
+        ).rejects.toThrow('Database connection lost');
+    });
+
+    it('should rethrow constraint error if user still not found after retry', async () => {
+        const errorDB = {
+            prepare: (sql: string) => ({
+                bind: () => ({
+                    first: async () => null, // Always return null - user never found
+                    run: async () => {
+                        if (sql.includes('INSERT INTO users')) {
+                            throw new Error('UNIQUE constraint failed: users.discord_id');
+                        }
+                        return { success: true, meta: {} };
+                    },
+                    all: async () => ({ results: [], success: true, meta: {} as D1Meta }),
+                }),
+            }),
+            exec: async () => ({ count: 0, duration: 0 }),
+            batch: async () => [],
+            dump: async () => new ArrayBuffer(0),
+        } as unknown as D1Database;
+
+        await expect(
+            findOrCreateUser(errorDB, {
+                discord_id: 'missing-discord',
+                username: 'test',
+                auth_provider: 'discord',
+            })
+        ).rejects.toThrow('UNIQUE constraint failed');
+    });
+});
