@@ -13,6 +13,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@xivdyetools/logger": "^1.0.0",
+    "@xivdyetools/types": "^1.0.0",
     "hono": "^4.6.0"
   },
   "devDependencies": {
