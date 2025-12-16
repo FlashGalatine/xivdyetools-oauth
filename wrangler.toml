@@ -6,6 +6,11 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domain routing
+routes = [
+  { pattern = "auth.xivdyetools.projectgalatine.com", custom_domain = true }
+]
+
 # Development settings (for wrangler dev)
 [dev]
 port = 8788
@@ -18,7 +23,7 @@ ENVIRONMENT = "production"
 DISCORD_CLIENT_ID = "1447108133020369048"
 XIVAUTH_CLIENT_ID = "phx-sXZeb_Ran6GAdcnsnjvdtOeNM4df0BZyF3Jyti0"
 FRONTEND_URL = "https://xivdyetools.projectgalatine.com"
-WORKER_URL = "https://xivdyetools-oauth.ashejunius.workers.dev"
+WORKER_URL = "https://auth.xivdyetools.projectgalatine.com"
 # JWT expiry in seconds (1 hour)
 JWT_EXPIRY = "3600"
 
