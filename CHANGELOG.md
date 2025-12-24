@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-12-24
+
+### Fixed
+
+#### Security Audit - Critical Issues Resolved
+
+- **OAUTH-CRITICAL-001**: Separated base64 decoding from JSON parsing in OAuth state handling
+  - Better error diagnostics: "Invalid state encoding" vs "Invalid state format"
+  - Helps distinguish between corrupted state and malformed data
+- **OAUTH-CRITICAL-002**: Fixed open redirect vulnerability in OAuth callback
+  - Validates redirect_uri origin against allowed origins (FRONTEND_URL)
+  - Blocks redirects to untrusted domains after successful authentication
+  - Allows localhost origins only in development environment
+
+---
+
 ## [2.1.0] - 2025-12-14
 
 ### Added

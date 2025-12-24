@@ -55,11 +55,21 @@ callbackRouter.get('/callback', async (c) => {
     exp?: number;
   };
 
+  // OAUTH-CRITICAL-001: Separate base64 decoding from JSON parsing for better error diagnostics
+  let decoded: string;
   try {
-    stateData = JSON.parse(atob(state));
+    decoded = atob(state);
   } catch {
     const redirectUrl = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
-    redirectUrl.searchParams.set('error', 'Invalid state parameter');
+    redirectUrl.searchParams.set('error', 'Invalid state encoding');
+    return c.redirect(redirectUrl.toString());
+  }
+
+  try {
+    stateData = JSON.parse(decoded);
+  } catch {
+    const redirectUrl = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
+    redirectUrl.searchParams.set('error', 'Invalid state format');
     return c.redirect(redirectUrl.toString());
   }
 
@@ -71,9 +81,38 @@ callbackRouter.get('/callback', async (c) => {
     return c.redirect(redirectUrl.toString());
   }
 
+  // OAUTH-CRITICAL-002: Validate redirect URI to prevent open redirect attacks
+  // Only allow redirects to trusted origins
+  const allowedOrigins = [
+    new URL(c.env.FRONTEND_URL).origin,
+  ];
+
+  // Allow localhost in development for testing
+  if (c.env.ENVIRONMENT === 'development') {
+    allowedOrigins.push('http://localhost:5173');
+    allowedOrigins.push('http://localhost:3000');
+    allowedOrigins.push('http://127.0.0.1:5173');
+    allowedOrigins.push('http://127.0.0.1:3000');
+  }
+
+  let redirectUrl: URL;
+  try {
+    redirectUrl = new URL(stateData.redirect_uri);
+  } catch {
+    const errorRedirect = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
+    errorRedirect.searchParams.set('error', 'Invalid redirect URI');
+    return c.redirect(errorRedirect.toString());
+  }
+
+  if (!allowedOrigins.includes(redirectUrl.origin)) {
+    console.error('Blocked redirect to untrusted origin:', redirectUrl.origin);
+    const errorRedirect = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
+    errorRedirect.searchParams.set('error', 'Untrusted redirect origin');
+    return c.redirect(errorRedirect.toString());
+  }
+
   // Redirect back to frontend with the auth code
   // The frontend will then call POST /auth/callback with code + code_verifier
-  const redirectUrl = new URL(stateData.redirect_uri);
   redirectUrl.searchParams.set('code', code);
   redirectUrl.searchParams.set('csrf', stateData.csrf);
   if (stateData.return_path && stateData.return_path !== '/') {

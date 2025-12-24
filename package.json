@@ -1,6 +1,6 @@
 {
   "name": "xivdyetools-oauth-worker",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
