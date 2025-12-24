@@ -191,7 +191,8 @@ callbackRouter.post('/callback', async (c) => {
       });
     }
 
-    // Exchange code for tokens with PKCE verifier
+    // OAUTH-HIGH-001: Exchange code for tokens with PKCE verifier
+    // Added 10 second timeout to prevent worker hang if Discord API is slow
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: {
@@ -205,6 +206,7 @@ callbackRouter.post('/callback', async (c) => {
         redirect_uri: tokenExchangeRedirectUri,
         code_verifier,
       }),
+      signal: AbortSignal.timeout(10000), // 10 second timeout
     });
 
     if (!tokenResponse.ok) {
@@ -240,11 +242,12 @@ callbackRouter.post('/callback', async (c) => {
       );
     }
 
-    // Fetch user info
+    // OAUTH-HIGH-001: Fetch user info with 5 second timeout
     const userResponse = await fetch('https://discord.com/api/users/@me', {
       headers: {
         Authorization: `Bearer ${tokens.access_token}`,
       },
+      signal: AbortSignal.timeout(5000), // 5 second timeout
     });
 
     if (!userResponse.ok) {
