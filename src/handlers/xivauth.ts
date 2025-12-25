@@ -360,7 +360,7 @@ xivauthRouter.post('/xivauth/callback', async (c) => {
       const characterData = characters.map((ch) => ({
         id: ch.lodestone_id,
         name: ch.name,
-        server: ch.home_world, // XIVAuth uses home_world
+        home_world: ch.home_world, // XIVAuth uses home_world
         verified: ch.verified,
       }));
       await storeCharacters(c.env.DB, user.id, characterData);

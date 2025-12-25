@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2025-12-24
+
+### Changed
+
+- Updated `@xivdyetools/types` to ^1.1.1 for ecosystem consistency
+- Updated `@xivdyetools/logger` to ^1.0.2 for ecosystem consistency
+
+### Fixed
+
+- Fixed type errors related to JWT payload requiring `auth_provider` field
+- Fixed type errors related to XIVAuthCharacter using `home_world` instead of `server`
+- Added missing JWT payload fields in token refresh (`discord_id`, `xivauth_id`, `primary_character`)
+
+---
+
 ## [2.2.1] - 2025-12-24
 
 ### Fixed

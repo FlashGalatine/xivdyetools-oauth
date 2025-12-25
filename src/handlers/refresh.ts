@@ -123,6 +123,10 @@ tokenRouter.post('/refresh', async (c) => {
       username: payload.username,
       global_name: payload.global_name,
       avatar: payload.avatar,
+      auth_provider: payload.auth_provider,
+      discord_id: payload.discord_id,
+      xivauth_id: payload.xivauth_id,
+      primary_character: payload.primary_character,
     };
 
     // Create new token manually (simplified since we already have payload)

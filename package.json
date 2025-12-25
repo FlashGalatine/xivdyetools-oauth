@@ -1,6 +1,6 @@
 {
   "name": "xivdyetools-oauth-worker",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
@@ -13,8 +13,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@xivdyetools/logger": "^1.0.0",
-    "@xivdyetools/types": "^1.0.0",
+    "@xivdyetools/logger": "^1.0.2",
+    "@xivdyetools/types": "^1.1.1",
     "hono": "^4.10.7"
   },
   "devDependencies": {

@@ -207,7 +207,7 @@ export async function storeCharacters(
         `INSERT INTO xivauth_characters (user_id, lodestone_id, name, server, verified)
          VALUES (?, ?, ?, ?, ?)`
       )
-      .bind(userId, char.id, char.name, char.server, char.verified ? 1 : 0)
+      .bind(userId, char.id, char.name, char.home_world, char.verified ? 1 : 0)
       .run();
   }
 }
@@ -227,7 +227,7 @@ export async function getCharacters(
   return result.results.map((row) => ({
     id: row.lodestone_id,
     name: row.name,
-    server: row.server,
+    home_world: row.server,
     verified: row.verified === 1,
   }));
 }
