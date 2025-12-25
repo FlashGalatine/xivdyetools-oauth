@@ -48,6 +48,13 @@ export function validateEnv(env: Env): EnvValidationResult {
     }
   }
 
+  // OAUTH-MED-001: Validate JWT_SECRET has sufficient length for security
+  if (env.JWT_SECRET && typeof env.JWT_SECRET === 'string') {
+    if (env.JWT_SECRET.length < 32) {
+      errors.push('JWT_SECRET must be at least 32 characters for security');
+    }
+  }
+
   // Validate JWT_EXPIRY is a valid number
   if (env.JWT_EXPIRY) {
     const expiry = parseInt(env.JWT_EXPIRY, 10);
