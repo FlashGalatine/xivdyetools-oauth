@@ -116,7 +116,7 @@ const createTestDB = () => {
                     userChars.push({
                         id: lodestone_id,
                         name,
-                        server,
+                        home_world: server,
                         verified: verified === 1,
                     });
                     characters.set(userId, userChars);
@@ -132,7 +132,7 @@ const createTestDB = () => {
                     const results = userChars.map((c) => ({
                         lodestone_id: c.id,
                         name: c.name,
-                        server: c.server,
+                        server: c.home_world,
                         verified: c.verified ? 1 : 0,
                     }));
                     return { results: results as T[], success: true, meta: {} as D1Meta };
@@ -417,7 +417,7 @@ describe('User Service', () => {
             });
 
             await storeCharacters(db, user.id, [
-                { id: 99999999, name: 'Test Character', server: 'Tonberry', verified: true },
+                { id: 99999999, name: 'Test Character', home_world: 'Tonberry', verified: true },
             ]);
 
             const chars = await getCharacters(db, user.id);
@@ -426,7 +426,7 @@ describe('User Service', () => {
             expect(chars[0]).toMatchObject({
                 id: 99999999,
                 name: 'Test Character',
-                server: 'Tonberry',
+                home_world: 'Tonberry',
                 verified: true,
             });
         });
