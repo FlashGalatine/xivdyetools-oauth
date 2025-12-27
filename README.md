@@ -197,10 +197,24 @@ See [LICENSE](./LICENSE) for full details.
 
 **This is a fan-made tool and is not affiliated with or endorsed by Square Enix Co., Ltd. FINAL FANTASY is a registered trademark of Square Enix Holdings Co., Ltd.**
 
+## Connect With Me
+
+**Flash Galatine** | Balmung (Crystal)
+
+🎮 **FFXIV**: [Lodestone Character](https://na.finalfantasyxiv.com/lodestone/character/7677106/)
+📝 **Blog**: [Project Galatine](https://blog.projectgalatine.com/)
+💻 **GitHub**: [@FlashGalatine](https://github.com/FlashGalatine)
+🐦 **X / Twitter**: [@AsheJunius](https://x.com/AsheJunius)
+📺 **Twitch**: [flashgalatine](https://www.twitch.tv/flashgalatine)
+🌐 **BlueSky**: [projectgalatine.com](https://bsky.app/profile/projectgalatine.com)
+❤️ **Patreon**: [ProjectGalatine](https://patreon.com/ProjectGalatine)
+☕ **Ko-Fi**: [flashgalatine](https://ko-fi.com/flashgalatine)
+💬 **Discord**: [Join Server](https://discord.gg/5VUSKTZCe5)
+
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/FlashGalatine/xivdyetools-oauth/issues)
-- **Discord**: [Join Server](https://discord.gg/rzxDHNr6Wv)
+- **Discord**: [Join Server](https://discord.gg/5VUSKTZCe5)
 
 ---
 
