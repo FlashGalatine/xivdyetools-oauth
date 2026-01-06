@@ -6,10 +6,41 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SELF, fetchWithEnv, createProductionEnv, env, createMockDB, VALID_CODE_VERIFIER } from './mocks/cloudflare-test.js';
 import { resetRateLimiter } from '../services/rate-limit.js';
+import { signState, type StateData } from '../utils/state-signing.js';
 import type { Env } from '../types.js';
 
 // Store original fetch
 const originalFetch = globalThis.fetch;
+
+/**
+ * Helper to decode signed state format (base64url(json).signature)
+ */
+function decodeSignedState(signedState: string): Record<string, unknown> {
+    const [encodedPart] = signedState.split('.');
+    // Convert base64url to base64
+    let base64 = encodedPart.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    while (base64.length % 4 !== 0) {
+        base64 += '=';
+    }
+    return JSON.parse(atob(base64));
+}
+
+/**
+ * Helper to create a signed state for testing GET callback
+ */
+async function createTestSignedState(data: Partial<StateData>): Promise<string> {
+    const stateData: StateData = {
+        csrf: data.csrf ?? 'test-csrf',
+        code_challenge: data.code_challenge,
+        redirect_uri: data.redirect_uri ?? 'http://localhost:5173/auth/callback',
+        return_path: data.return_path ?? '/',
+        provider: data.provider ?? 'xivauth',
+        iat: data.iat ?? Math.floor(Date.now() / 1000),
+        exp: data.exp ?? Math.floor(Date.now() / 1000) + 600, // 10 minutes
+    };
+    return signState(stateData, env.JWT_SECRET);
+}
 
 describe('XIVAuth Handler', () => {
     beforeEach(() => {
@@ -155,8 +186,8 @@ describe('XIVAuth Handler', () => {
             const state = location.searchParams.get('state');
             expect(state).toBeTruthy();
 
-            // Decode the state
-            const stateData = JSON.parse(atob(state!));
+            // Decode the signed state (format: base64url(json).signature)
+            const stateData = decodeSignedState(state!);
             expect(stateData.provider).toBe('xivauth');
             expect(stateData.code_challenge).toBe('challenge123');
             expect(stateData.return_path).toBe('/settings');
@@ -174,7 +205,7 @@ describe('XIVAuth Handler', () => {
 
             const location = new URL(response.headers.get('location')!);
             const state = location.searchParams.get('state');
-            const stateData = JSON.parse(atob(state!));
+            const stateData = decodeSignedState(state!);
             expect(stateData.return_path).toBe('/');
         });
 
@@ -190,7 +221,7 @@ describe('XIVAuth Handler', () => {
 
             const location = new URL(response.headers.get('location')!);
             const state = location.searchParams.get('state');
-            const stateData = JSON.parse(atob(state!));
+            const stateData = decodeSignedState(state!);
             expect(stateData.csrf).toBe('my-csrf-token');
         });
     });
@@ -236,13 +267,13 @@ describe('XIVAuth Handler', () => {
         });
 
         it('should require code parameter', async () => {
-            const state = btoa(JSON.stringify({
+            const state = await createTestSignedState({
                 csrf: 'test',
                 code_challenge: 'challenge',
                 redirect_uri: 'http://localhost:5173/auth/callback',
                 return_path: '/',
                 provider: 'xivauth',
-            }));
+            });
 
             const params = new URLSearchParams({ state });
 
@@ -289,13 +320,13 @@ describe('XIVAuth Handler', () => {
         });
 
         it('should redirect with code for secure PKCE flow', async () => {
-            const state = btoa(JSON.stringify({
+            const state = await createTestSignedState({
                 csrf: 'test-csrf-token',
                 code_challenge: 'challenge',
                 redirect_uri: 'http://localhost:5173/auth/callback',
                 return_path: '/',
                 provider: 'xivauth',
-            }));
+            });
 
             const params = new URLSearchParams({
                 code: 'valid_auth_code',
@@ -318,13 +349,13 @@ describe('XIVAuth Handler', () => {
         });
 
         it('should include return_path in redirect when provided', async () => {
-            const state = btoa(JSON.stringify({
+            const state = await createTestSignedState({
                 csrf: 'test',
                 code_challenge: 'challenge',
                 redirect_uri: 'http://localhost:5173/auth/callback',
                 return_path: '/settings',
                 provider: 'xivauth',
-            }));
+            });
 
             const params = new URLSearchParams({
                 code: 'code',
@@ -340,13 +371,13 @@ describe('XIVAuth Handler', () => {
         });
 
         it('should not include return_path when it is root', async () => {
-            const state = btoa(JSON.stringify({
+            const state = await createTestSignedState({
                 csrf: 'test',
                 code_challenge: 'challenge',
                 redirect_uri: 'http://localhost:5173/auth/callback',
                 return_path: '/',
                 provider: 'xivauth',
-            }));
+            });
 
             const params = new URLSearchParams({
                 code: 'code',
@@ -386,7 +417,7 @@ describe('XIVAuth Handler', () => {
             const response = await SELF.fetch('http://localhost/auth/xivauth/callback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code_verifier: 'verifier123' }),
+                body: JSON.stringify({ code_verifier: VALID_CODE_VERIFIER }),
             });
 
             const json = await response.json();
@@ -423,7 +454,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'invalid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -456,7 +487,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -506,7 +537,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -557,7 +588,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -602,7 +633,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -644,7 +675,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -700,7 +731,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -723,7 +754,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'code',
-                    code_verifier: 'verifier',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 
@@ -774,7 +805,7 @@ describe('XIVAuth Handler', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     code: 'valid_code',
-                    code_verifier: 'verifier123',
+                    code_verifier: VALID_CODE_VERIFIER,
                 }),
             });
 

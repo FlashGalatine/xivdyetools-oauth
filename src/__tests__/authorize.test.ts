@@ -7,6 +7,20 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { SELF, VALID_CODE_CHALLENGE } from './mocks/cloudflare-test.js';
 import { resetRateLimiter } from '../services/rate-limit.js';
 
+/**
+ * Helper to decode signed state format (base64url(json).signature)
+ */
+function decodeSignedState(signedState: string): Record<string, unknown> {
+    const [encodedPart] = signedState.split('.');
+    // Convert base64url to base64
+    let base64 = encodedPart.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    while (base64.length % 4 !== 0) {
+        base64 += '=';
+    }
+    return JSON.parse(atob(base64));
+}
+
 describe('Authorize Handler', () => {
     beforeEach(() => {
         // Reset rate limiter between tests to avoid 429 errors
@@ -173,8 +187,8 @@ describe('Authorize Handler', () => {
             const state = location.searchParams.get('state');
             expect(state).toBeTruthy();
 
-            // Decode base64 state
-            const decodedState = JSON.parse(atob(state!));
+            // Decode signed state (format: base64url(json).signature)
+            const decodedState = decodeSignedState(state!);
             expect(decodedState.code_challenge).toBe(VALID_CODE_CHALLENGE);
             // SECURITY: code_verifier should NOT be in state
             expect(decodedState.code_verifier).toBeUndefined();
@@ -192,7 +206,7 @@ describe('Authorize Handler', () => {
 
             const location = new URL(response.headers.get('location')!);
             const state = location.searchParams.get('state');
-            const decodedState = JSON.parse(atob(state!));
+            const decodedState = decodeSignedState(state!);
 
             expect(decodedState.return_path).toBe('/');
         });
