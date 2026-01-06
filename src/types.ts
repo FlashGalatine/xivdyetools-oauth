@@ -61,6 +61,10 @@ export interface Env {
   WORKER_URL: string;
   JWT_EXPIRY: string;
 
+  // Feature flags
+  STATE_TRANSITION_PERIOD?: string; // "true" to allow unsigned states (temporary migration flag)
+  USE_DO_RATE_LIMITING?: string; // "true" to use Durable Objects for rate limiting
+
   // Secrets
   DISCORD_CLIENT_SECRET: string;
   XIVAUTH_CLIENT_SECRET?: string; // Optional - only needed for confidential client mode
@@ -68,6 +72,9 @@ export interface Env {
 
   // KV Namespaces (optional for backward compatibility)
   TOKEN_BLACKLIST?: KVNamespace;
+
+  // Durable Objects
+  RATE_LIMITER?: DurableObjectNamespace; // Rate limiter DO (optional during migration)
 
   // D1 Database for user management
   DB: D1Database;

@@ -12,6 +12,7 @@ import { callbackRouter } from './handlers/callback.js';
 import { tokenRouter } from './handlers/refresh.js';
 import { xivauthRouter } from './handlers/xivauth.js';
 import { checkRateLimit, getClientIp } from './services/rate-limit.js';
+import { checkRateLimitDO } from './services/rate-limit-do.js';
 import { validateEnv, logValidationErrors } from './utils/env-validation.js';
 import { requestIdMiddleware, getRequestId, type RequestIdVariables } from './middleware/request-id.js';
 import { loggerMiddleware, getLogger } from './middleware/logger.js';
@@ -77,18 +78,20 @@ app.use(
         return origin;
       }
 
-      // Allow specific localhost ports for development
-      // SECURITY: Only whitelisted ports to prevent malicious localhost apps from accessing OAuth
-      try {
-        const url = new URL(origin);
-        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-          // Must have a port and it must be in our whitelist
-          if (url.port && ALLOWED_LOCALHOST_PORTS.includes(url.port)) {
-            return origin;
+      // SECURITY: Only allow localhost in development environment
+      // Prevents malicious localhost apps from accessing OAuth in production
+      if (c.env.ENVIRONMENT === 'development') {
+        try {
+          const url = new URL(origin);
+          if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+            // Must have a port and it must be in our whitelist
+            if (url.port && ALLOWED_LOCALHOST_PORTS.includes(url.port)) {
+              return origin;
+            }
           }
+        } catch {
+          // Invalid URL - not allowed
         }
-      } catch {
-        // Invalid URL - not allowed
       }
 
       // Not allowed
@@ -118,10 +121,22 @@ app.use('*', async (c, next) => {
 
 // Rate limiting middleware for auth endpoints
 // Protects against brute force and credential stuffing attacks
+// Supports both in-memory (legacy) and Durable Objects (persistent) rate limiting
 app.use('/auth/*', async (c, next) => {
   const clientIp = getClientIp(c.req.raw);
   const path = new URL(c.req.url).pathname;
-  const result = checkRateLimit(clientIp, path);
+
+  // Feature flag: use DO or in-memory rate limiting
+  const useDO = c.env.USE_DO_RATE_LIMITING === 'true' && c.env.RATE_LIMITER;
+
+  let result;
+  if (useDO) {
+    // Use Durable Objects rate limiting (persistent, distributed)
+    result = await checkRateLimitDO(clientIp, path, c.env.RATE_LIMITER!);
+  } else {
+    // Use in-memory rate limiting (legacy, per-isolate)
+    result = checkRateLimit(clientIp, path);
+  }
 
   // Set rate limit headers on all responses
   c.header('X-RateLimit-Limit', result.limit.toString());

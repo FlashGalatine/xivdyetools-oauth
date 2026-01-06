@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import type { Env, DiscordTokenResponse, DiscordUser, AuthResponse } from '../types.js';
 import { createJWTForUser, getAvatarUrl } from '../services/jwt-service.js';
 import { findOrCreateUser } from '../services/user-service.js';
+import { verifyState } from '../utils/state-signing.js';
 
 export const callbackRouter = new Hono<{ Bindings: Env }>();
 
@@ -45,31 +46,28 @@ callbackRouter.get('/callback', async (c) => {
     return c.redirect(redirectUrl.toString());
   }
 
-  // Decode state (no longer contains code_verifier for security)
+  // Decode and verify state signature
   let stateData: {
     csrf: string;
-    code_challenge: string;
+    code_challenge?: string;
     redirect_uri: string;
     return_path: string;
-    iat?: number;
-    exp?: number;
+    provider?: string;
+    iat: number;
+    exp: number;
   };
 
-  // OAUTH-CRITICAL-001: Separate base64 decoding from JSON parsing for better error diagnostics
-  let decoded: string;
+  // SECURITY: Verify state signature to prevent tampering
+  // Allow unsigned states during transition period
   try {
-    decoded = atob(state);
-  } catch {
-    const redirectUrl = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
-    redirectUrl.searchParams.set('error', 'Invalid state encoding');
-    return c.redirect(redirectUrl.toString());
-  }
+    const allowUnsigned =
+      c.env.ENVIRONMENT === 'development' || c.env.STATE_TRANSITION_PERIOD === 'true';
 
-  try {
-    stateData = JSON.parse(decoded);
-  } catch {
+    stateData = await verifyState(state, c.env.JWT_SECRET, allowUnsigned);
+  } catch (err) {
     const redirectUrl = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
-    redirectUrl.searchParams.set('error', 'Invalid state format');
+    const errorMsg = err instanceof Error ? err.message : 'Invalid state';
+    redirectUrl.searchParams.set('error', errorMsg);
     return c.redirect(redirectUrl.toString());
   }
 

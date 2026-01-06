@@ -5,6 +5,8 @@
 
 import { Hono } from 'hono';
 import type { Env } from '../types.js';
+import { STATE_EXPIRY_SECONDS } from '../constants/oauth.js';
+import { signState } from '../utils/state-signing.js';
 
 export const authorizeRouter = new Hono<{ Bindings: Env }>();
 
@@ -23,7 +25,7 @@ export const authorizeRouter = new Hono<{ Bindings: Env }>();
  * It must remain on the client and be sent directly to POST /auth/callback.
  * This is the core security guarantee of PKCE - the verifier never travels through redirects.
  */
-authorizeRouter.get('/discord', (c) => {
+authorizeRouter.get('/discord', async (c) => {
   const { code_challenge, code_challenge_method, state, redirect_uri, return_path } =
     c.req.query();
 
@@ -99,12 +101,13 @@ authorizeRouter.get('/discord', (c) => {
     code_challenge, // Store for logging/debugging only
     redirect_uri: finalRedirectUri,
     return_path: return_path || '/',
+    provider: 'discord', // Mark this as Discord flow
     iat: now, // Issued at timestamp
-    exp: now + 600, // 10 minute expiration (OAuth flow should complete quickly)
+    exp: now + STATE_EXPIRY_SECONDS, // 10 minute expiration (OAuth flow should complete quickly)
   };
 
-  // Encode state as base64
-  const encodedState = btoa(JSON.stringify(stateData));
+  // SECURITY: Sign state to prevent tampering
+  const encodedState = await signState(stateData, c.env.JWT_SECRET);
 
   // Build Discord OAuth URL
   const discordUrl = new URL('https://discord.com/oauth2/authorize');
