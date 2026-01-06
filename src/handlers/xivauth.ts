@@ -13,6 +13,20 @@ import type {
 } from '../types.js';
 import { createJWTForUser } from '../services/jwt-service.js';
 import { findOrCreateUser, storeCharacters } from '../services/user-service.js';
+import {
+  STATE_EXPIRY_SECONDS,
+  REQUEST_TIMEOUT_MS,
+  USER_INFO_TIMEOUT_MS,
+  XIVAUTH_REQUIRED_SCOPES,
+  ALLOWED_REDIRECT_ORIGINS,
+} from '../constants/oauth.js';
+import {
+  validateStateExpiration,
+  validateRedirectUri,
+  validateCodeVerifier,
+  validateScopes,
+} from '../utils/oauth-validation.js';
+import { signState, verifyState } from '../utils/state-signing.js';
 
 export const xivauthRouter = new Hono<{ Bindings: Env }>();
 
@@ -40,7 +54,7 @@ const XIVAUTH_SCOPES = 'user user:social character refresh';
  * - redirect_uri: Where to redirect after auth (must be whitelisted)
  * - return_path: Path in frontend to return to after auth (optional)
  */
-xivauthRouter.get('/xivauth', (c) => {
+xivauthRouter.get('/xivauth', async (c) => {
   const { code_challenge, code_challenge_method, state, redirect_uri, return_path } = c.req.query();
 
   // Validate PKCE parameters
@@ -90,16 +104,20 @@ xivauthRouter.get('/xivauth', (c) => {
     );
   }
 
-  // Generate state with provider marker
+  // Generate state with provider marker and expiration
+  const now = Math.floor(Date.now() / 1000);
   const stateData = {
     csrf: state || crypto.randomUUID(),
     code_challenge,
     redirect_uri: finalRedirectUri,
     return_path: return_path || '/',
     provider: 'xivauth', // Mark this as XIVAuth flow
+    iat: now, // Issued at timestamp
+    exp: now + STATE_EXPIRY_SECONDS, // 10 minute expiration
   };
 
-  const encodedState = btoa(JSON.stringify(stateData));
+  // SECURITY: Sign state to prevent tampering
+  const encodedState = await signState(stateData, c.env.JWT_SECRET);
 
   // Build XIVAuth authorization URL
   const xivauthUrl = new URL(XIVAUTH_AUTH_URL);
@@ -141,22 +159,63 @@ xivauthRouter.get('/xivauth/callback', async (c) => {
     return c.redirect(redirectUrl.toString());
   }
 
-  // Decode state
+  // Decode and verify state signature
   let stateData: {
     csrf: string;
-    code_challenge: string;
+    code_challenge?: string;
     redirect_uri: string;
     return_path: string;
-    provider: string;
+    provider?: string;
+    iat: number;
+    exp: number;
   };
 
+  // SECURITY: Verify state signature to prevent tampering
+  // Allow unsigned states during transition period
   try {
-    stateData = JSON.parse(atob(state));
-  } catch {
+    const allowUnsigned =
+      c.env.ENVIRONMENT === 'development' || c.env.STATE_TRANSITION_PERIOD === 'true';
+
+    stateData = await verifyState(state, c.env.JWT_SECRET, allowUnsigned);
+  } catch (err) {
     const redirectUrl = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
-    redirectUrl.searchParams.set('error', 'Invalid state parameter');
+    const errorMsg = err instanceof Error ? err.message : 'Invalid state';
+    redirectUrl.searchParams.set('error', errorMsg);
     redirectUrl.searchParams.set('provider', 'xivauth');
     return c.redirect(redirectUrl.toString());
+  }
+
+  // SECURITY: Validate state expiration to prevent replay attacks
+  try {
+    validateStateExpiration(stateData);
+  } catch (err) {
+    const redirectUrl = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
+    const errorMsg = err instanceof Error ? err.message : 'Invalid state';
+    redirectUrl.searchParams.set('error', errorMsg);
+    redirectUrl.searchParams.set('provider', 'xivauth');
+    return c.redirect(redirectUrl.toString());
+  }
+
+  // SECURITY: Validate redirect URI to prevent open redirect attacks
+  try {
+    // Build allowlist based on environment
+    const allowedOrigins = [...ALLOWED_REDIRECT_ORIGINS];
+    if (c.env.ENVIRONMENT !== 'development') {
+      // In production, filter out localhost
+      const prodOrigins = allowedOrigins.filter(
+        (origin) => !origin.includes('localhost') && !origin.includes('127.0.0.1')
+      );
+      validateRedirectUri(stateData.redirect_uri, prodOrigins);
+    } else {
+      // In development, allow all origins including localhost
+      validateRedirectUri(stateData.redirect_uri, allowedOrigins);
+    }
+  } catch (err) {
+    console.error('Blocked redirect to untrusted origin:', stateData.redirect_uri);
+    const errorRedirect = new URL(`${c.env.FRONTEND_URL}/auth/callback`);
+    errorRedirect.searchParams.set('error', 'Untrusted redirect origin');
+    errorRedirect.searchParams.set('provider', 'xivauth');
+    return c.redirect(errorRedirect.toString());
   }
 
   // Redirect back to frontend with the auth code and provider marker
@@ -206,6 +265,19 @@ xivauthRouter.post('/xivauth/callback', async (c) => {
     );
   }
 
+  // SECURITY: Validate code_verifier format (RFC 7636)
+  // Must be 43-128 characters using only unreserved characters: [A-Za-z0-9-._~]
+  // This is defense in depth - XIVAuth also validates this
+  if (!validateCodeVerifier(code_verifier)) {
+    return c.json<AuthResponse>(
+      {
+        success: false,
+        error: 'Invalid code_verifier format',
+      },
+      400
+    );
+  }
+
   try {
     // Build token exchange parameters
     // client_secret is optional - XIVAuth supports public client mode with PKCE only
@@ -223,12 +295,14 @@ xivauthRouter.post('/xivauth/callback', async (c) => {
     }
 
     // Exchange code for tokens with PKCE verifier
+    // Added 10 second timeout to prevent worker hang if XIVAuth API is slow
     const tokenResponse = await fetch(XIVAUTH_TOKEN_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams(tokenParams),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), // 10 second timeout
     });
 
     if (!tokenResponse.ok) {
@@ -259,6 +333,25 @@ xivauthRouter.post('/xivauth/callback', async (c) => {
       has_refresh_token: !!tokens.refresh_token,
     });
 
+    // SECURITY: Validate that we received the required scopes
+    // This ensures the token has the permissions we need
+    try {
+      validateScopes(tokens.scope, XIVAUTH_REQUIRED_SCOPES);
+    } catch (err) {
+      console.error('XIVAuth token missing required scopes:', {
+        received: tokens.scope,
+        required: XIVAUTH_REQUIRED_SCOPES,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return c.json<AuthResponse>(
+        {
+          success: false,
+          error: 'Token missing required permissions',
+        },
+        401
+      );
+    }
+
     // Fetch user info from XIVAuth
     // IMPORTANT: Must include Accept header - XIVAuth Rails API requires it (responds with 406 otherwise)
     const userResponse = await fetch(XIVAUTH_USER_URL, {
@@ -266,6 +359,7 @@ xivauthRouter.post('/xivauth/callback', async (c) => {
         Authorization: `Bearer ${tokens.access_token}`,
         Accept: 'application/json',
       },
+      signal: AbortSignal.timeout(USER_INFO_TIMEOUT_MS), // 5 second timeout
     });
 
     if (!userResponse.ok) {
@@ -288,6 +382,21 @@ xivauthRouter.post('/xivauth/callback', async (c) => {
 
     const xivauthUser: XIVAuthUser = await userResponse.json();
 
+    // SECURITY: Validate that required user fields are present
+    // This mirrors Discord callback validation (Low severity issue #9)
+    if (!xivauthUser.id) {
+      console.error('XIVAuth user response missing required fields:', {
+        hasId: !!xivauthUser.id,
+      });
+      return c.json<AuthResponse>(
+        {
+          success: false,
+          error: 'Invalid user data received',
+        },
+        401
+      );
+    }
+
     // Log user info structure for debugging
     console.log('XIVAuth user info received:', {
       id: xivauthUser.id,
@@ -306,6 +415,7 @@ xivauthRouter.post('/xivauth/callback', async (c) => {
           Authorization: `Bearer ${tokens.access_token}`,
           Accept: 'application/json',
         },
+        signal: AbortSignal.timeout(USER_INFO_TIMEOUT_MS), // 5 second timeout
       });
 
       if (charactersResponse.ok) {
