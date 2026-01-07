@@ -1,6 +1,6 @@
 # XIV Dye Tools OAuth Worker
 
-**v2.1.0** | Cloudflare Worker that handles OAuth authentication for the XIV Dye Tools ecosystem.
+**v2.2.2** | Cloudflare Worker that handles OAuth authentication for the XIV Dye Tools ecosystem.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3%2B-blue)](https://www.typescriptlang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020)](https://workers.cloudflare.com/)
@@ -19,6 +19,7 @@ This Worker provides multi-provider OAuth authentication for the XIV Dye Tools w
 🎮 **XIVAuth Support** - Login with FFXIV character (via XIVAuth.net)
 🗄️ **D1 Database** - User management and account merging
 🔗 **Account Merging** - Link Discord and XIVAuth accounts automatically
+🛡️ **Security Hardened** - Validated redirect URIs, API call timeouts, structured logging
 
 ## API Endpoints
 
