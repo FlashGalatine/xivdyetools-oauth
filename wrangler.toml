@@ -32,6 +32,32 @@ JWT_EXPIRY = "3600"
 name = "xivdyetools-oauth-dev"
 vars = { ENVIRONMENT = "development", DISCORD_CLIENT_ID = "1447108133020369048", XIVAUTH_CLIENT_ID = "phx-sXZeb_Ran6GAdcnsnjvdtOeNM4df0BZyF3Jyti0", FRONTEND_URL = "http://localhost:5173", WORKER_URL = "http://localhost:8788", JWT_EXPIRY = "3600" }
 
+# Preview environment for v4 UI migration (use: wrangler deploy --env preview)
+# Shares production KV/D1 but allows the Pages preview URL
+[env.preview]
+name = "xivdyetools-oauth-preview"
+routes = [
+  { pattern = "auth-preview.xivdyetools.projectgalatine.com", custom_domain = true }
+]
+[env.preview.vars]
+ENVIRONMENT = "preview"
+DISCORD_CLIENT_ID = "1447108133020369048"
+XIVAUTH_CLIENT_ID = "phx-sXZeb_Ran6GAdcnsnjvdtOeNM4df0BZyF3Jyti0"
+FRONTEND_URL = "https://v4-ui-migration.xiv-colorexplorer.pages.dev"
+WORKER_URL = "https://auth-preview.xivdyetools.projectgalatine.com"
+JWT_EXPIRY = "3600"
+
+# Preview KV namespace (uses production - same users/tokens)
+[[env.preview.kv_namespaces]]
+binding = "TOKEN_BLACKLIST"
+id = "0d6f3be3b4704e91a83e6387b9769e45"
+
+# Preview D1 database (uses production - same user data)
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "xivdyetools-users"
+database_id = "6e97b759-70dd-49a8-a93c-0541c7fe6c67"
+
 # KV Namespace for token revocation blacklist
 [[kv_namespaces]]
 binding = "TOKEN_BLACKLIST"
