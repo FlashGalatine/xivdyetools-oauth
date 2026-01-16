@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # Custom domain routing
 routes = [
-  { pattern = "auth.xivdyetools.projectgalatine.com", custom_domain = true }
+  { pattern = "auth.xivdyetools.app", custom_domain = true }
 ]
 
 # Development settings (for wrangler dev)
@@ -22,8 +22,8 @@ local_protocol = "http"
 ENVIRONMENT = "production"
 DISCORD_CLIENT_ID = "1447108133020369048"
 XIVAUTH_CLIENT_ID = "phx-sXZeb_Ran6GAdcnsnjvdtOeNM4df0BZyF3Jyti0"
-FRONTEND_URL = "https://xivdyetools.projectgalatine.com"
-WORKER_URL = "https://auth.xivdyetools.projectgalatine.com"
+FRONTEND_URL = "https://xivdyetools.app"
+WORKER_URL = "https://auth.xivdyetools.app"
 # JWT expiry in seconds (1 hour)
 JWT_EXPIRY = "3600"
 
@@ -37,14 +37,14 @@ vars = { ENVIRONMENT = "development", DISCORD_CLIENT_ID = "1447108133020369048",
 [env.preview]
 name = "xivdyetools-oauth-preview"
 routes = [
-  { pattern = "auth-preview.xivdyetools.projectgalatine.com", custom_domain = true }
+  { pattern = "auth-preview.xivdyetools.app", custom_domain = true }
 ]
 [env.preview.vars]
 ENVIRONMENT = "preview"
 DISCORD_CLIENT_ID = "1447108133020369048"
 XIVAUTH_CLIENT_ID = "phx-sXZeb_Ran6GAdcnsnjvdtOeNM4df0BZyF3Jyti0"
 FRONTEND_URL = "https://v4-ui-migration.xiv-colorexplorer.pages.dev"
-WORKER_URL = "https://auth-preview.xivdyetools.projectgalatine.com"
+WORKER_URL = "https://auth-preview.xivdyetools.app"
 JWT_EXPIRY = "3600"
 
 # Preview KV namespace (uses production - same users/tokens)

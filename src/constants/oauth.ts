@@ -8,7 +8,8 @@
  * These origins are permitted as OAuth callback destinations
  */
 export const ALLOWED_REDIRECT_ORIGINS = [
-  'https://xivdyetools.projectgalatine.com',
+  'https://xivdyetools.app',
+  'https://xivdyetools.projectgalatine.com', // Transition period - remove after migration complete
   'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',

@@ -82,7 +82,9 @@ xivauthRouter.get('/xivauth', async (c) => {
   const allowedRedirects = [
     c.env.FRONTEND_URL,
     `${c.env.FRONTEND_URL}/auth/callback`,
-    'https://xivdyetools.projectgalatine.com',
+    'https://xivdyetools.app',
+    'https://xivdyetools.app/auth/callback',
+    'https://xivdyetools.projectgalatine.com', // Transition period - remove after migration complete
     'https://xivdyetools.projectgalatine.com/auth/callback',
     'http://localhost:5173',
     'http://localhost:5173/auth/callback',

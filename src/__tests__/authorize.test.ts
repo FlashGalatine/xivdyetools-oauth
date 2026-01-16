@@ -224,10 +224,10 @@ describe('Authorize Handler', () => {
             expect(location).toContain('code_challenge_method=S256');
         });
 
-        it('should allow xivdyetools.projectgalatine.com redirect', async () => {
+        it('should allow xivdyetools.app redirect', async () => {
             const params = new URLSearchParams({
                 code_challenge: VALID_CODE_CHALLENGE,
-                redirect_uri: 'https://xivdyetools.projectgalatine.com/auth/callback',
+                redirect_uri: 'https://xivdyetools.app/auth/callback',
             });
 
             const response = await SELF.fetch(`http://localhost/auth/discord?${params}`, {
