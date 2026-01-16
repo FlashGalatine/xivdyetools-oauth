@@ -8,7 +8,8 @@ compatibility_flags = ["nodejs_compat"]
 
 # Custom domain routing
 routes = [
-  { pattern = "auth.xivdyetools.app", custom_domain = true }
+  { pattern = "auth.xivdyetools.app", custom_domain = true },
+  { pattern = "auth.xivdyetools.projectgalatine.com", custom_domain = true }  # Transition - remove after v4 migration
 ]
 
 # Development settings (for wrangler dev)
