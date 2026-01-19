@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-01-19
+
+### Fixed
+
+- **OAUTH-BUG-001**: Fixed potential call stack overflow in JWT service. Replaced string spread with `charCodeAt` (which could fail on large arrays) with `Array.from().map().join()` pattern for safer encoding
+
+### Refactored
+
+- **OAUTH-REF-002**: Consolidated OAuth validation utilities
+  - Created `src/utils/oauth-validation.ts` with shared helpers
+  - `validateCodeChallenge()` - RFC 7636 format validation
+  - `validateRedirectUri()` - Origin allowlist validation
+  - `ALLOWED_REDIRECT_ORIGINS` constant in `constants/oauth.ts`
+  - Refactored both Discord and XIVAuth handlers to use shared utilities
+
+---
+
 ## [2.2.2] - 2025-12-24
 
 ### Changed
