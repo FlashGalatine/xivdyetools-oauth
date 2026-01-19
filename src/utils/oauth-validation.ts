@@ -1,9 +1,27 @@
 /**
  * OAuth Validation Utilities
  * Security validation functions for OAuth flow parameters
+ *
+ * OAUTH-REF-002: Consolidated validation utilities shared across OAuth handlers
+ * (Discord authorize, XIVAuth authorize, callbacks, etc.)
  */
 
 import { STATE_EXPIRY_SECONDS } from '../constants/oauth.js';
+
+/**
+ * Validate code_challenge format per RFC 7636
+ * For S256 method, challenge is BASE64URL(SHA256(verifier)) = 43 characters
+ * We allow 43-128 chars for flexibility, using base64url charset: [A-Za-z0-9\-_]
+ *
+ * OAUTH-REF-002: Extracted from duplicate validation in authorize handlers
+ *
+ * @param challenge - PKCE code challenge string
+ * @returns true if valid, false otherwise
+ */
+export function validateCodeChallenge(challenge: string): boolean {
+  const regex = /^[A-Za-z0-9\-_]{43,128}$/;
+  return regex.test(challenge);
+}
 
 /**
  * Validate code_verifier format per RFC 7636

@@ -1,12 +1,16 @@
 /**
  * Authorization Handler
  * Redirects users to Discord OAuth with PKCE parameters
+ *
+ * OAUTH-REF-002: Refactored to use shared validation utilities from oauth-validation.ts
+ * This reduces code duplication between Discord and XIVAuth handlers.
  */
 
 import { Hono } from 'hono';
 import type { Env } from '../types.js';
-import { STATE_EXPIRY_SECONDS } from '../constants/oauth.js';
+import { STATE_EXPIRY_SECONDS, ALLOWED_REDIRECT_ORIGINS } from '../constants/oauth.js';
 import { signState } from '../utils/state-signing.js';
+import { validateCodeChallenge, validateRedirectUri } from '../utils/oauth-validation.js';
 
 export const authorizeRouter = new Hono<{ Bindings: Env }>();
 
@@ -40,11 +44,8 @@ authorizeRouter.get('/discord', async (c) => {
     );
   }
 
-  // SECURITY: Validate code_challenge format (RFC 7636)
-  // For S256 method, challenge is BASE64URL(SHA256(verifier)) = 43 characters
-  // Allow some flexibility (43-128 chars) for edge cases, using base64url charset
-  const challengeRegex = /^[A-Za-z0-9\-_]{43,128}$/;
-  if (!challengeRegex.test(code_challenge)) {
+  // OAUTH-REF-002: Use shared validation utility instead of inline regex
+  if (!validateCodeChallenge(code_challenge)) {
     return c.json(
       {
         error: 'Invalid code_challenge format',
@@ -64,28 +65,19 @@ authorizeRouter.get('/discord', async (c) => {
     );
   }
 
-  // Validate redirect_uri if provided
-  // Support both the primary frontend URL and the custom domain
-  const allowedRedirects = [
+  // OAUTH-REF-002: Build allowlist from shared constants + env-specific frontend URL
+  const allowedOrigins = [
+    ...ALLOWED_REDIRECT_ORIGINS,
     c.env.FRONTEND_URL,
     `${c.env.FRONTEND_URL}/auth/callback`,
-    'https://xivdyetools.app',
-    'https://xivdyetools.app/auth/callback',
-    'https://xivdyetools.projectgalatine.com', // Transition period - remove after migration complete
-    'https://xivdyetools.projectgalatine.com/auth/callback',
-    'http://localhost:5173',
-    'http://localhost:5173/auth/callback',
   ];
 
   const finalRedirectUri = redirect_uri || `${c.env.FRONTEND_URL}/auth/callback`;
 
-  // Check if redirect is to an allowed origin
-  const redirectOrigin = new URL(finalRedirectUri).origin;
-  const isAllowed = allowedRedirects.some(
-    (allowed) => new URL(allowed).origin === redirectOrigin
-  );
-
-  if (!isAllowed) {
+  // OAUTH-REF-002: Use shared validation utility for redirect URI
+  try {
+    validateRedirectUri(finalRedirectUri, allowedOrigins);
+  } catch {
     return c.json(
       {
         error: 'Invalid redirect_uri',

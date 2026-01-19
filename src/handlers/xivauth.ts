@@ -24,6 +24,7 @@ import {
   validateStateExpiration,
   validateRedirectUri,
   validateCodeVerifier,
+  validateCodeChallenge,
   validateScopes,
 } from '../utils/oauth-validation.js';
 import { signState, verifyState } from '../utils/state-signing.js';
@@ -68,6 +69,17 @@ xivauthRouter.get('/xivauth', async (c) => {
     );
   }
 
+  // OAUTH-REF-002: Use shared validation utility for code_challenge format
+  if (!validateCodeChallenge(code_challenge)) {
+    return c.json(
+      {
+        error: 'Invalid code_challenge format',
+        message: 'code_challenge must be a valid base64url-encoded value',
+      },
+      400
+    );
+  }
+
   if (code_challenge_method && code_challenge_method !== 'S256') {
     return c.json(
       {
@@ -78,25 +90,19 @@ xivauthRouter.get('/xivauth', async (c) => {
     );
   }
 
-  // Validate redirect_uri if provided
-  const allowedRedirects = [
+  // OAUTH-REF-002: Build allowlist from shared constants + env-specific frontend URL
+  const allowedOrigins = [
+    ...ALLOWED_REDIRECT_ORIGINS,
     c.env.FRONTEND_URL,
     `${c.env.FRONTEND_URL}/auth/callback`,
-    'https://xivdyetools.app',
-    'https://xivdyetools.app/auth/callback',
-    'https://xivdyetools.projectgalatine.com', // Transition period - remove after migration complete
-    'https://xivdyetools.projectgalatine.com/auth/callback',
-    'http://localhost:5173',
-    'http://localhost:5173/auth/callback',
   ];
 
   const finalRedirectUri = redirect_uri || `${c.env.FRONTEND_URL}/auth/callback`;
 
-  // Check if redirect is to an allowed origin
-  const redirectOrigin = new URL(finalRedirectUri).origin;
-  const isAllowed = allowedRedirects.some((allowed) => new URL(allowed).origin === redirectOrigin);
-
-  if (!isAllowed) {
+  // OAUTH-REF-002: Use shared validation utility for redirect URI
+  try {
+    validateRedirectUri(finalRedirectUri, allowedOrigins);
+  } catch {
     return c.json(
       {
         error: 'Invalid redirect_uri',
