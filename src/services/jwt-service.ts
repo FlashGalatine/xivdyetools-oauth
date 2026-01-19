@@ -9,6 +9,20 @@
 import type { JWTPayload, DiscordUser, Env, UserRow, AuthProvider, PrimaryCharacter } from '../types.js';
 
 /**
+ * Convert Uint8Array to binary string safely (without spread operator)
+ *
+ * OAUTH-BUG-001 FIX: Using Array.from().map().join() instead of
+ * String.fromCharCode(...bytes) to avoid call stack size limits
+ * with large byte arrays.
+ */
+function bytesToBinaryString(bytes: Uint8Array): string {
+  // Using Array.from to avoid spread operator call stack limits
+  return Array.from(bytes)
+    .map((b) => String.fromCharCode(b))
+    .join('');
+}
+
+/**
  * Base64URL encode a string or ArrayBuffer
  * OAUTH-REF-002: Exported for reuse in refresh.ts to avoid duplication
  */
@@ -18,11 +32,11 @@ export function base64UrlEncode(data: string | ArrayBuffer): string {
   if (typeof data === 'string') {
     // Use TextEncoder for strings
     const bytes = new TextEncoder().encode(data);
-    base64 = btoa(String.fromCharCode(...bytes));
+    base64 = btoa(bytesToBinaryString(bytes));
   } else {
     // Handle ArrayBuffer
     const bytes = new Uint8Array(data);
-    base64 = btoa(String.fromCharCode(...bytes));
+    base64 = btoa(bytesToBinaryString(bytes));
   }
 
   // Convert to base64url
