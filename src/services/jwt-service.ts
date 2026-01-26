@@ -45,8 +45,9 @@ export function base64UrlEncode(data: string | ArrayBuffer): string {
 
 /**
  * Base64URL decode to string
+ * OAUTH-REF-003: Exported for reuse in state-signing.ts to avoid duplication
  */
-function base64UrlDecode(str: string): string {
+export function base64UrlDecode(str: string): string {
   // Convert from base64url to base64
   let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
 

@@ -8,7 +8,8 @@
  * - Supports transition period for backward compatibility
  */
 
-import { base64UrlEncode, signJwtData } from '../services/jwt-service.js';
+// OAUTH-REF-003: Import base64UrlDecode from jwt-service to avoid duplication
+import { base64UrlEncode, base64UrlDecode, signJwtData } from '../services/jwt-service.js';
 
 /**
  * OAuth state data structure
@@ -102,28 +103,4 @@ export async function verifyState(
  */
 export function isStateSigned(state: string): boolean {
   return state.split('.').length === 2;
-}
-
-/**
- * Base64URL decode to string
- * Mirrors the implementation from jwt-service.ts for state decoding
- */
-function base64UrlDecode(str: string): string {
-  // Convert from base64url to base64
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-
-  // Add padding if needed
-  const padding = base64.length % 4;
-  if (padding) {
-    base64 += '='.repeat(4 - padding);
-  }
-
-  // Decode
-  const decoded = atob(base64);
-  const bytes = new Uint8Array(decoded.length);
-  for (let i = 0; i < decoded.length; i++) {
-    bytes[i] = decoded.charCodeAt(i);
-  }
-
-  return new TextDecoder().decode(bytes);
 }
