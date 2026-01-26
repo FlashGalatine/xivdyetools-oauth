@@ -135,7 +135,7 @@ app.use('/auth/*', async (c, next) => {
     result = await checkRateLimitDO(clientIp, path, c.env.RATE_LIMITER!);
   } else {
     // Use in-memory rate limiting (legacy, per-isolate)
-    result = checkRateLimit(clientIp, path);
+    result = await checkRateLimit(clientIp, path);
   }
 
   // Set rate limit headers on all responses

@@ -1,6 +1,6 @@
 {
   "name": "xivdyetools-oauth-worker",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
@@ -15,6 +15,7 @@
   "dependencies": {
     "@xivdyetools/crypto": "^1.0.0",
     "@xivdyetools/logger": "^1.0.2",
+    "@xivdyetools/rate-limiter": "^1.0.0",
     "@xivdyetools/types": "^1.1.1",
     "hono": "^4.11.4"
   },
