@@ -27,7 +27,7 @@
     "@xivdyetools/test-utils": "^1.0.3",
     "miniflare": "^4.20251202.1",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4",
+    "vitest": "^4.0.18",
     "wrangler": "^4.59.1"
   },
   "engines": {
