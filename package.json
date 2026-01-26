@@ -13,7 +13,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@xivdyetools/crypto": "file:../xivdyetools-crypto",
+    "@xivdyetools/crypto": "^1.0.0",
     "@xivdyetools/logger": "^1.0.2",
     "@xivdyetools/types": "^1.1.1",
     "hono": "^4.11.4"
