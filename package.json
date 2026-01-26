@@ -14,17 +14,17 @@
   },
   "dependencies": {
     "@xivdyetools/crypto": "^1.0.0",
-    "@xivdyetools/logger": "^1.0.2",
+    "@xivdyetools/logger": "^1.1.0",
     "@xivdyetools/rate-limiter": "^1.0.0",
-    "@xivdyetools/types": "^1.1.1",
-    "hono": "^4.11.4"
+    "@xivdyetools/types": "^1.7.0",
+    "hono": "^4.11.6"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.10.14",
+    "@cloudflare/vitest-pool-workers": "^0.12.6",
     "@cloudflare/workers-types": "^4.20241127.0",
     "@types/node": "^22.10.2",
     "@vitest/coverage-v8": "^3.2.4",
-    "@xivdyetools/test-utils": "^1.0.3",
+    "@xivdyetools/test-utils": "^1.1.0",
     "miniflare": "^4.20251202.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
