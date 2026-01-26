@@ -1,0 +1,38 @@
+# Pre-commit hooks configuration
+# https://pre-commit.com/
+#
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+#
+# First-time setup for detect-secrets:
+#   pip install detect-secrets
+#   detect-secrets scan > .secrets.baseline
+
+repos:
+  # Secret detection - prevents accidental secret commits
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .secrets.baseline
+        exclude: |
+          (?x)^(
+            package-lock\.json|
+            pnpm-lock\.yaml|
+            .*\.snap|
+            .*\.min\.js
+          )$
+
+  # Basic file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
