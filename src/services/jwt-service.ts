@@ -7,64 +7,28 @@
  */
 
 import type { JWTPayload, DiscordUser, Env, UserRow, AuthProvider, PrimaryCharacter } from '../types.js';
+import {
+  base64UrlEncode as base64UrlEncodeString,
+  base64UrlEncodeBytes,
+  base64UrlDecode,
+  base64UrlDecodeBytes,
+} from '@xivdyetools/crypto';
 
-/**
- * Convert Uint8Array to binary string safely (without spread operator)
- *
- * OAUTH-BUG-001 FIX: Using Array.from().map().join() instead of
- * String.fromCharCode(...bytes) to avoid call stack size limits
- * with large byte arrays.
- */
-function bytesToBinaryString(bytes: Uint8Array): string {
-  // Using Array.from to avoid spread operator call stack limits
-  return Array.from(bytes)
-    .map((b) => String.fromCharCode(b))
-    .join('');
-}
+// REFACTOR-001: Re-export from @xivdyetools/crypto for backwards compatibility
+export { base64UrlDecode } from '@xivdyetools/crypto';
 
 /**
  * Base64URL encode a string or ArrayBuffer
  * OAUTH-REF-002: Exported for reuse in refresh.ts to avoid duplication
+ * REFACTOR-001: Wrapper around @xivdyetools/crypto functions to support both types
  */
 export function base64UrlEncode(data: string | ArrayBuffer): string {
-  let base64: string;
-
   if (typeof data === 'string') {
-    // Use TextEncoder for strings
-    const bytes = new TextEncoder().encode(data);
-    base64 = btoa(bytesToBinaryString(bytes));
+    return base64UrlEncodeString(data);
   } else {
     // Handle ArrayBuffer
-    const bytes = new Uint8Array(data);
-    base64 = btoa(bytesToBinaryString(bytes));
+    return base64UrlEncodeBytes(new Uint8Array(data));
   }
-
-  // Convert to base64url
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-/**
- * Base64URL decode to string
- * OAUTH-REF-003: Exported for reuse in state-signing.ts to avoid duplication
- */
-export function base64UrlDecode(str: string): string {
-  // Convert from base64url to base64
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-
-  // Add padding if needed
-  const padding = base64.length % 4;
-  if (padding) {
-    base64 += '='.repeat(4 - padding);
-  }
-
-  // Decode
-  const decoded = atob(base64);
-  const bytes = new Uint8Array(decoded.length);
-  for (let i = 0; i < decoded.length; i++) {
-    bytes[i] = decoded.charCodeAt(i);
-  }
-
-  return new TextDecoder().decode(bytes);
 }
 
 /**
@@ -96,6 +60,7 @@ export async function signJwtData(data: string, secret: string): Promise<string>
 
 /**
  * Verify HMAC-SHA256 signature
+ * REFACTOR-001: Uses @xivdyetools/crypto for base64url decoding
  */
 async function verify(
   data: string,
@@ -105,13 +70,8 @@ async function verify(
   const key = await getSigningKey(secret);
   const encoder = new TextEncoder();
 
-  // Decode signature from base64url
-  let base64 = signature.replace(/-/g, '+').replace(/_/g, '/');
-  const padding = base64.length % 4;
-  if (padding) {
-    base64 += '='.repeat(4 - padding);
-  }
-  const sigBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  // Decode signature from base64url using shared crypto utility
+  const sigBytes = base64UrlDecodeBytes(signature);
 
   return crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(data));
 }
