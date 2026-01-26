@@ -1,6 +1,6 @@
 {
   "name": "xivdyetools-oauth-worker",
-  "version": "2.2.2",
+  "version": "2.3.1",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
@@ -15,7 +15,7 @@
   "dependencies": {
     "@xivdyetools/logger": "^1.0.2",
     "@xivdyetools/types": "^1.1.1",
-    "hono": "^4.10.7"
+    "hono": "^4.11.4"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.10.14",
@@ -26,7 +26,7 @@
     "miniflare": "^4.20251202.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
-    "wrangler": "^4.53.0"
+    "wrangler": "^4.59.1"
   },
   "engines": {
     "node": ">=18.0.0"
