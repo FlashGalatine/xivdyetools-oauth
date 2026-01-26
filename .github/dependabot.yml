@@ -23,3 +23,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # Ignore Vitest 4.x until @cloudflare/vitest-pool-workers supports it
+    # Track progress: https://github.com/cloudflare/workers-sdk/issues/11064
+    ignore:
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/coverage-v8"
+        update-types: ["version-update:semver-major"]
