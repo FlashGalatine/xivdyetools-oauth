@@ -34,7 +34,7 @@ export interface RateLimitResult {
  */
 const limiter = new MemoryRateLimiter({
   maxEntries: 10_000, // Match previous MAX_ENTRIES
-  cleanupIntervalRequests: 100, // Match previous CLEANUP_INTERVAL
+  cleanupInterval: 100, // Match previous CLEANUP_INTERVAL
 });
 
 /**
