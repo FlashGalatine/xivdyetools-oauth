@@ -1,3 +1,5 @@
+# NOTICE! This repo has been DEPRECATED! For the latest updates to the XIV Dye Tools app, see the mono-repo here: https://github.com/FlashGalatine/xivdyetools
+
 # XIV Dye Tools OAuth Worker
 
 **v2.2.2** | Cloudflare Worker that handles OAuth authentication for the XIV Dye Tools ecosystem.
